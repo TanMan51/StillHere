@@ -3,6 +3,12 @@
 newmtl SH_Case
 Kd 0.921569 0.921569 0.921569
 
+newmtl SH_Logo
+Kd 0.227451 0.250980 0.290196
+
+newmtl SH_Wordmark
+Kd 0.184314 0.219608 0.200000
+
 newmtl SH_Foil
 Kd 0.784314 0.784314 0.803922
 
