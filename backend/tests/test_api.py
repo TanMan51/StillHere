@@ -293,3 +293,43 @@ def test_one_bad_device_does_not_stop_the_loop(client, monkeypatch):
     monkeypatch.setattr(alerts, "check_device", flaky)
     checker.check_all()
     assert sorted(checked) == ["door-1", "fridge-1", "walker-1"]
+
+
+def _email_only(monkeypatch):
+    from app import config, notify
+
+    monkeypatch.setattr(config, "SMTP_USER", "stillhere@example.com")
+    monkeypatch.setattr(config, "SMTP_PASSWORD", "app-password")
+    monkeypatch.setattr(config, "ALERT_EMAILS", ["family@example.com"])
+    emails = []
+    monkeypatch.setattr(
+        notify, "send_email", lambda subject, body: emails.append((subject, body)) or "email"
+    )
+    return emails
+
+
+def test_alerts_fall_back_to_email_without_sms_provider(client, monkeypatch):
+    emails = _email_only(monkeypatch)
+    client.post("/api/contacts", json={"name": "Sam", "phone": "+14045550123"})
+    _event(client, {"type": "reply", "value": "help"})
+    assert _fridge(client)["active_alert"]["sms_sent"] is True
+    assert emails and emails[0][0] == "URGENT: StillHere alert"
+
+
+def test_alerts_fall_back_to_email_when_texts_fail(client, monkeypatch):
+    from app import config, notify
+
+    emails = _email_only(monkeypatch)
+    monkeypatch.setattr(config, "SIMPLETEXTING_API_KEY", "test-key")
+
+    def fail(to, body):
+        raise notify.SmsError("SimpleTexting error 403: API access not enabled")
+
+    monkeypatch.setattr(notify, "send_sms", fail)
+    contact = client.post("/api/contacts", json={"name": "Sam", "phone": "+14045550123"}).json()
+    _event(client, {"type": "reply", "value": "help"})
+    assert len(emails) == 1
+    assert client.post(f"/api/contacts/{contact['id']}/test").json() == {
+        "ok": True,
+        "channel": "email",
+    }

@@ -31,14 +31,24 @@ def set_status(device: Device, status: str) -> None:
 
 
 def send_to_contacts(session: Session, body: str) -> bool:
-    """Text every contact. One failed number never stops the others. True if any sent."""
+    """Text every contact, falling back to email when no text got through.
+
+    One failed number never stops the others. True if anything was delivered.
+    """
     sent = False
-    for contact in session.exec(select(Contact)).all():
+    if notify.sms_configured() or not notify.email_configured():
+        for contact in session.exec(select(Contact)).all():
+            try:
+                notify.send_sms(contact.phone, body)
+                sent = True
+            except notify.SmsError as e:
+                log.error("text to contact %s failed: %s", contact.id, e)
+    if not sent and notify.email_configured():
         try:
-            notify.send_sms(contact.phone, body)
+            notify.send_email(messages.email_subject(body), body)
             sent = True
-        except notify.SmsError as e:
-            log.error("text to contact %s failed: %s", contact.id, e)
+        except notify.EmailError as e:
+            log.error("email fallback failed: %s", e)
     return sent
 
 

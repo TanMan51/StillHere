@@ -11,5 +11,8 @@ for key in (
     "TWILIO_FROM_NUMBER",
     "SIMPLETEXTING_API_KEY",
     "SIMPLETEXTING_FROM_NUMBER",
+    "SMTP_USER",
+    "SMTP_PASSWORD",
+    "ALERT_EMAILS",
 ):
     os.environ[key] = ""

@@ -50,8 +50,16 @@ def delete_contact(contact_id: int, session: Session = Depends(get_session)):
 @router.post("/contacts/{contact_id}/test")
 def test_contact(contact_id: int, session: Session = Depends(get_session)):
     contact = _get_contact(session, contact_id)
-    try:
-        channel = notify.send_sms(contact.phone, messages.test_message(contact.name))
-    except notify.SmsError as e:
-        raise HTTPException(502, str(e)) from e
-    return {"ok": True, "channel": channel}
+    body = messages.test_message(contact.name)
+    sms_error = None
+    if notify.sms_configured() or not notify.email_configured():
+        try:
+            return {"ok": True, "channel": notify.send_sms(contact.phone, body)}
+        except notify.SmsError as e:
+            sms_error = e
+    if notify.email_configured():
+        try:
+            return {"ok": True, "channel": notify.send_email("StillHere test", body)}
+        except notify.EmailError as e:
+            raise HTTPException(502, f"{sms_error}; {e}" if sms_error else str(e)) from e
+    raise HTTPException(502, str(sms_error))

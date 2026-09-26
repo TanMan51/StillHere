@@ -47,3 +47,7 @@ def all_clear(device_name: str) -> str:
 
 def test_message(contact_name: str) -> str:
     return f"StillHere: Hi {contact_name}, this is a test. You'll get alerts at this number."
+
+
+def email_subject(body: str) -> str:
+    return "URGENT: StillHere alert" if body.startswith("URGENT") else "StillHere alert"
