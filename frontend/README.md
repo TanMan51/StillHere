@@ -14,23 +14,61 @@ npm.cmd install
 npm.cmd run dev
 ```
 
-Open http://localhost:5173. Mock mode is on by default. It uses the team's
+Open http://localhost:5173 for the public landing page: the house scene,
+followed by About Us, How It Works, Tracker Setup, and project FAQs. The top-right
+Log in button opens a keyboard-accessible dialog. `/login` shows the same landing
+page; the dashboard is at `/dashboard`. Mock mode is on by default. It uses the team's
 fixtures, sends no texts, and resets changes on reload. Try a device card,
 save a new name, mark the fridge alert handled, then add/remove a contact.
 The demo controls live at http://localhost:5173/demo, outside the main menu.
 
-To connect to Person A's server at localhost:8000:
+For the demo login, use `demo@stillhere.example` and `stillhere-demo`
+(also displayed on the login page). A session flag survives refreshes in the
+same tab; Log out clears it. No email or password is stored or sent. This is
+demo navigation, not authentication. In live mode, the existing API contract
+still provides public dashboard access, and `/login` explains that account
+login is unavailable. Person A must implement server authentication and an
+agreed API contract before real accounts can be connected.
+
+The “Help me choose a spot” button on Overview and Setup opens `/placement`.
+Enter up to five ideas, then follow the questions for each object. The decision
+tree checks attachment, movement, daily use, and personal use. Optional household
+background and per-idea descriptions help identify potential water, heat, weather,
+and portability concerns. For example, a phone prompts checks about staying dry
+and distinguishing carrying from routine activity. Detected concerns add explicit
+questions before the usual checks; a no/unsure answer excludes that location.
+Among otherwise equal options, fewer potential concerns ranks first. These are
+conservative local rules, not an AI assessment or a device protection rating.
+Descriptions mentioning a condition, even in the negative, prompt verification.
+Unknown objects still receive the standard checks; they are not certified safe.
+
+Unsuitable ideas exit early. Tied leading options prompt questions about the target routine, relevance,
+consistency, and frequency. If those still tie, the user identifies the most reliable
+location and explains why. New exposure concerns in tie-break descriptions must also
+be confirmed. Back lets you
+revise answers. This guide keeps its answers only while the page is open and
+does not change device settings. `src/PlacementGuide.tsx` owns the interface;
+`src/placement.ts` defines the questions and comparison rules;
+`src/placementRisks.ts` contains the object and environment rules.
+
+To connect to the live Railway backend from PowerShell:
 
 ```powershell
-$env:VITE_USE_MOCK = 'false'
-npm.cmd run dev
+npm.cmd run dev:live
 ```
 
-Restart Vite after changing the flag. Requests to `/api` are forwarded to port
-8000 by `vite.config.ts`. For production, set the same flag **before** running
-`npm.cmd run build`; it is baked into the build. Give Person A `frontend/dist`.
-Their server must serve `index.html` for frontend routes such as `/contacts`
-and `/devices/fridge-1`, while keeping API routes separate.
+This selects live mode and proxies `/api` to
+https://stillhere-production-8652.up.railway.app with `changeOrigin: true`.
+Alternatively, set `$env:VITE_USE_MOCK = 'false'` before `npm.cmd run dev`.
+Restart Vite when switching modes. Ordinary `npm.cmd run dev` uses sample data
+unless that environment variable is set; remove it to return to the default.
+
+Production builds use the real same-origin `/api` by default. Set
+`VITE_USE_MOCK=true` explicitly only when building a sample-data preview.
+Railway can serve `frontend/dist` after the backend deployment changes land;
+frontend routes need an `index.html` fallback separate from API routes.
+Live contact tests and alert/demo controls can send real notifications.
+The integration checks do not enable the fast clock or send test messages.
 
 ```powershell
 npm.cmd test
@@ -43,7 +81,20 @@ main flows in headless Chrome and writes desktop/mobile screenshots to
 Format frontend changes with `npm.cmd run format`; verify with `npm.cmd run format:check`.
 Generated output, local environments, and dependency caches are excluded in `.prettierignore`.
 
-## The big picture
+## Visual design
+
+The interface uses the original cream, forest-green, and sage palette with
+rounded cards. `src/LandingPage.tsx` contains the public page and login dialog.
+`src/IceScene.tsx` renders the house once using native WebGL, with shaders in
+`src/sceneShader.ts`. Pointer movement shifts the cached canvas rather than
+rerunning the shader continuously. The Motion button disables that movement;
+reduced-motion preferences start it disabled. The dashboard has no scene.
+A static SVG remains available if WebGL is unavailable or lost.
+Run `node scripts/check-scene.mjs` with the dev server running to verify those paths
+and capture desktop/mobile screenshots. Login and the other browser scripts remain
+available for checking application behavior.
+
+## Application flow
 
 ```text
 React page -> api.ts -> mock.ts -> shared JSON fixtures (preview)

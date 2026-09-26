@@ -12,15 +12,21 @@ const errors = [];
 page.on("pageerror", (error) => errors.push(error.message));
 await mkdir("screenshots", { recursive: true });
 try {
-  await page.goto("http://localhost:5173");
-  await page.getByRole("heading", { name: "Around the home" }).waitFor();
+  await page.goto("http://localhost:5173/dashboard");
+  await page.getByLabel("Email address").fill("demo@stillhere.example");
+  await page.getByLabel("Password", { exact: true }).fill("stillhere-demo");
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: "Log in", exact: true })
+    .click();
+  await page.getByRole("heading", { name: "Devices" }).waitFor();
   await page.getByRole("heading", { name: "Mom's fridge" }).waitFor();
   await page.screenshot({
     path: "screenshots/overview-desktop.png",
     fullPage: true,
   });
   await page.getByRole("link", { name: /Mom's fridge/ }).click();
-  await page.getByRole("heading", { name: "The everyday rhythm" }).waitFor();
+  await page.getByRole("heading", { name: "Activity by hour" }).waitFor();
   await page.locator(".recharts-bar-rectangle").first().waitFor();
   await page.getByLabel("Device name").fill("Kitchen fridge");
   await page.getByRole("button", { name: "Save settings" }).click();
@@ -43,16 +49,14 @@ try {
     .getByText("Browser Test", { exact: true })
     .waitFor({ state: "detached" });
   await page.getByRole("link", { name: "Setup", exact: true }).click();
-  await page
-    .getByRole("heading", { name: "Your home, a scan away." })
-    .waitFor();
+  await page.getByRole("heading", { name: "Dashboard QR code" }).waitFor();
   assert.equal(await page.locator(".setup svg").count(), 1);
   await page.goto("http://localhost:5173/demo");
   await page.getByRole("button", { name: "Enable fast clock (1440×)" }).click();
   await page.getByRole("button", { name: "Disable fast clock" }).waitFor();
   await page.getByRole("button", { name: "Load a normal week" }).click();
   await page.getByText("42 events loaded", { exact: true }).waitFor();
-  await page.goto("http://localhost:5173");
+  await page.goto("http://localhost:5173/dashboard");
   await page.setViewportSize({ width: 390, height: 844 });
   await page.getByRole("heading", { name: "Mom's fridge" }).waitFor();
   assert.ok(
@@ -66,7 +70,7 @@ try {
     fullPage: true,
   });
   await page.getByRole("link", { name: /Mom's fridge/ }).click();
-  await page.getByRole("heading", { name: "The everyday rhythm" }).waitFor();
+  await page.getByRole("heading", { name: "Activity by hour" }).waitFor();
   assert.ok(
     await page.evaluate(
       () => document.documentElement.scrollWidth <= window.innerWidth,

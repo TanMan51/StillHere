@@ -5,8 +5,11 @@ import type {
   Device,
   DevicesResponse,
 } from "./types";
-// Default to fixtures until Person A's server is available. Never silently fall back on API errors.
-export const useMock = import.meta.env.VITE_USE_MOCK !== "false";
+// Production uses the same-origin backend; local development defaults to fixtures.
+// An explicit flag overrides the default. Never fall back to fixtures on API errors.
+export const useMock =
+  import.meta.env.VITE_USE_MOCK === "true" ||
+  (import.meta.env.VITE_USE_MOCK !== "false" && !import.meta.env.PROD);
 async function request<T>(
   path: string,
   method = "GET",

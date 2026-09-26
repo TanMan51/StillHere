@@ -6,7 +6,16 @@ import {
   type FormEvent,
   type ReactNode,
 } from "react";
-import { Link, NavLink, Route, Routes, useParams } from "react-router-dom";
+import {
+  Link,
+  Navigate,
+  NavLink,
+  Route,
+  Routes,
+  useLocation,
+  useNavigate,
+  useParams,
+} from "react-router-dom";
 import {
   Bar,
   BarChart,
@@ -20,10 +29,13 @@ import { QRCodeSVG } from "qrcode.react";
 import { api, useMock } from "./api";
 import { usePoll, useTick } from "./hooks";
 import type { Device, Status } from "./types";
+import PlacementGuide, { PlacementHelp } from "./PlacementGuide";
+import { hasDemoSession, saveDemoSession } from "./Login";
+import LandingPage from "./LandingPage";
 
 const labels: Record<Status, string> = {
   ok: "Activity looks normal",
-  inactive_alert: "Time to check in",
+  inactive_alert: "Inactivity alert",
   urgent: "Help requested",
   awaiting_reply: "Waiting for a reply",
   offline: "Sensor offline",
@@ -171,11 +183,16 @@ function Overview() {
   const attention = data?.devices.filter((d) => d.status !== "ok").length ?? 0;
   return (
     <>
-      <Heading eyebrow="YOUR FAMILY, CONNECTED" title="A little peace of mind.">
-        <span className="live">
-          <i /> Updates every 2 seconds
-        </span>
-      </Heading>
+      <section className="overview-hero">
+        <Heading eyebrow="01 / MONITORING" title="Your products">
+          <span className="live">
+            <i /> Updates every 2 seconds
+          </span>
+        </Heading>
+        <a className="hero-scroll" href="#device-status">
+          View device status <span aria-hidden="true">↓</span>
+        </a>
+      </section>
       <Feedback error={error} />
       {notice && (
         <div className="notice" role="status">
@@ -185,20 +202,17 @@ function Overview() {
           </button>
         </div>
       )}
-      <section className="summary">
+      <section className="summary" id="device-status">
         <div>
-          <p className="eyebrow">AT A GLANCE</p>
+          <p className="eyebrow">DEVICE STATUS</p>
           <h2>
             {!data
-              ? "Connecting to your home…"
+              ? "Loading device status…"
               : attention
-                ? `${attention} things could use a check-in.`
-                : "Everyday activity looks normal."}
+                ? `${attention} devices need attention.`
+                : "No active device alerts."}
           </h2>
-          <p>
-            Small signs of everyday life. A thoughtful nudge when something
-            changes.
-          </p>
+          <p>View device activity, connection status, and alerts.</p>
         </div>
         <div className="summary-stat">
           <strong>
@@ -209,9 +223,10 @@ function Overview() {
         </div>
       </section>
       <div className="section-heading">
-        <h2>Around the home</h2>
-        <span>{data?.devices.length ?? 0} familiar objects</span>
+        <h2>Devices</h2>
+        <span>{data?.devices.length ?? 0} devices</span>
       </div>
+      <PlacementHelp />
       <div className="cards">
         {data?.devices.map((d) => (
           <Link to={`/devices/${d.id}`} className="device-card" key={d.id}>
@@ -228,7 +243,7 @@ function Overview() {
             <p className="routine">
               {d.routine_note ??
                 (d.online
-                  ? "Keeping an eye on the everyday rhythm."
+                  ? "Monitoring activity."
                   : "Check the sensor’s power and Wi-Fi connection.")}
             </p>
             <div className="card-bottom">
@@ -238,16 +253,10 @@ function Overview() {
         ))}
       </div>
       {data && !data.devices.length && (
-        <div className="panel">
-          No sensors configured yet. Person A can add devices in the backend
-          configuration.
-        </div>
+        <div className="panel">No sensors are configured yet.</div>
       )}
       <div className="footnote">
-        <span>♡</span>
         <p>
-          Connection through everyday moments.
-          <br />
           <small>
             Activity is a signal to check in, not a confirmation of someone’s
             wellbeing.
@@ -278,7 +287,7 @@ function DevicePage() {
   );
   return (
     <>
-      <Link className="back" to="/">
+      <Link className="back" to="/dashboard">
         ← All devices
       </Link>
       <Heading eyebrow={d.object_type.toUpperCase()} title={d.name}>
@@ -304,7 +313,7 @@ function DevicePage() {
       </section>
       <div className="detail-grid">
         <section className="panel">
-          <h2>The everyday rhythm</h2>
+          <h2>Activity by hour</h2>
           <p className="muted">
             {d.baseline.ready
               ? `Average activity by hour · ${d.baseline.days_of_data} days observed`
@@ -328,7 +337,16 @@ function DevicePage() {
                   interval={5}
                 />
                 <YAxis allowDecimals={false} width={28} />
-                <Tooltip labelFormatter={(h) => `${h}:00`} />
+                <Tooltip
+                  labelFormatter={(h) => `${h}:00`}
+                  contentStyle={{
+                    background: "#ffffff",
+                    borderColor: "#d5dfd5",
+                    color: "#253e36",
+                  }}
+                  itemStyle={{ color: "#4e7460" }}
+                  cursor={{ fill: "#ffffff0a" }}
+                />
                 <Bar
                   isAnimationActive={false}
                   dataKey="count"
@@ -336,14 +354,15 @@ function DevicePage() {
                   radius={[4, 4, 0, 0]}
                 >
                   {d.baseline.hourly_activity.map((_, h) => (
-                    <Cell key={h} fill={h === hour ? "#d6a64b" : "#498776"} />
+                    <Cell key={h} fill={h === hour ? "#184e42" : "#a5b99a"} />
                   ))}
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
           </div>
           <small>
-            Hours shown in {d.baseline.timezone}. Gold marks the current hour.
+            Hours shown in {d.baseline.timezone}. Dark blue marks the current
+            hour.
           </small>
         </section>
         <Settings key={d.id} device={d} onDone={refresh} />
@@ -456,11 +475,11 @@ function Contacts() {
   }
   return (
     <>
-      <Heading eyebrow="A CIRCLE OF CARE" title="The people who show up." />
+      <Heading eyebrow="ALERT RECIPIENTS" title="Contacts" />
       <Feedback error={error} />
       <div className="detail-grid">
         <section className="panel">
-          <h2>Trusted contacts</h2>
+          <h2>Alert contacts</h2>
           <p className="muted">Every contact receives check-in alerts.</p>
           {data?.map((c) => (
             <div className="contact" key={c.id}>
@@ -537,9 +556,10 @@ function Setup() {
   }
   return (
     <>
-      <Heading eyebrow="ALWAYS CLOSE BY" title="Bring your family along." />
+      <Heading eyebrow="CONFIGURATION" title="Setup" />
+      <PlacementHelp />
       <section className="panel setup">
-        <h2>Your home, a scan away.</h2>
+        <h2>Dashboard QR code</h2>
         <p>Use the deployed dashboard address so another phone can reach it.</p>
         <label>
           Dashboard URL
@@ -578,7 +598,7 @@ function DemoPage() {
   const selected = id || devices.data?.devices[0]?.id || "";
   return (
     <>
-      <Heading eyebrow="BEHIND THE SCENES" title="Demo controls." />
+      <Heading eyebrow="TESTING" title="Demo controls" />
       <Feedback error={demo.error || devices.error} />
       <section className="panel">
         <p>
@@ -673,6 +693,52 @@ function DemoPage() {
   );
 }
 export default function App() {
+  const [loggedIn, setLoggedIn] = useState(hasDemoSession);
+  const [loggingOut, setLoggingOut] = useState(false);
+  const location = useLocation();
+  const navigate = useNavigate();
+  const isLanding = location.pathname === "/" || location.pathname === "/login";
+  useEffect(() => {
+    if (isLanding) setLoggingOut(false);
+  }, [isLanding]);
+  if (useMock && !loggedIn && !isLanding) {
+    return (
+      <Navigate
+        to="/login"
+        replace
+        state={
+          loggingOut ? null : { from: location.pathname + location.search }
+        }
+      />
+    );
+  }
+  function login() {
+    saveDemoSession(true);
+    setLoggedIn(true);
+    const from: unknown = location.state?.from;
+    navigate(
+      typeof from === "string" &&
+        from.startsWith("/") &&
+        !from.startsWith("//") &&
+        !from.startsWith("/login") &&
+        from !== "/"
+        ? from
+        : "/dashboard",
+      { replace: true },
+    );
+    window.scrollTo(0, 0);
+  }
+  function logout() {
+    setLoggingOut(true);
+    saveDemoSession(false);
+    setLoggedIn(false);
+    navigate("/login", { replace: true, state: null });
+    window.scrollTo(0, 0);
+  }
+  if (isLanding)
+    return (
+      <LandingPage key={location.key} onLogin={login} loggedIn={loggedIn} />
+    );
   return (
     <>
       <header className="topbar">
@@ -681,13 +747,19 @@ export default function App() {
           StillHere<span className="brand-dot">.</span>
         </Link>
         <nav aria-label="Main navigation">
-          <NavLink to="/" end>
+          <NavLink to="/dashboard" end>
             Overview
           </NavLink>
           <NavLink to="/contacts">Contacts</NavLink>
           <NavLink to="/setup">Setup</NavLink>
         </nav>
-        <span className="household">♡ &nbsp; Family space</span>
+        {useMock ? (
+          <button className="secondary logout-button" onClick={logout}>
+            Log out
+          </button>
+        ) : (
+          <Link to="/login">Log in</Link>
+        )}
       </header>
       {useMock && (
         <div className="mock-banner">
@@ -695,26 +767,33 @@ export default function App() {
           sent
         </div>
       )}
-      <main>
+      <main
+        className={
+          location.pathname === "/dashboard"
+            ? "overview-layout"
+            : "application-layout"
+        }
+      >
         <Routes>
-          <Route path="/" element={<Overview />} />
+          <Route path="/dashboard" element={<Overview />} />
           <Route path="/devices/:id" element={<DevicePage />} />
           <Route path="/contacts" element={<Contacts />} />
           <Route path="/setup" element={<Setup />} />
+          <Route path="/placement" element={<PlacementGuide />} />
           <Route path="/demo" element={<DemoPage />} />
           <Route
             path="*"
             element={
               <>
                 <h1>Page not found</h1>
-                <Link to="/">Back to overview</Link>
+                <Link to="/dashboard">Back to overview</Link>
               </>
             }
           />
         </Routes>
       </main>
       <footer>
-        STILLHERE <span>Familiar routines. Meaningful connections.</span>
+        STILLHERE <span>Activity monitoring</span>
       </footer>
     </>
   );

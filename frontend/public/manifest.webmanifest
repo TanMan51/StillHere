@@ -3,8 +3,8 @@
   "short_name": "StillHere",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#f7f8f3",
-  "theme_color": "#184e42",
+  "background_color": "#c1ccd5",
+  "theme_color": "#263641",
   "icons": [
     {
       "src": "/icon.svg",
