@@ -1,7 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import { fragmentShader, vertexShader } from "./sceneShader";
 
-export default function IceScene({ dark = false }: { dark?: boolean }) {
+// Matches the page background (#f7f8f3) so the house sits on the site, not in a box.
+const BACKDROP = [0xf7 / 255, 0xf8 / 255, 0xf3 / 255] as const;
+
+export default function IceScene() {
   const canvas = useRef<HTMLCanvasElement>(null);
   const [motion, setMotion] = useState(
     () => !window.matchMedia("(prefers-reduced-motion: reduce)").matches,
@@ -51,7 +54,7 @@ export default function IceScene({ dark = false }: { dark?: boolean }) {
       return;
     }
     gl.useProgram(program);
-    gl.uniform1f(gl.getUniformLocation(program, "darkStage"), dark ? 1 : 0);
+    gl.uniform3f(gl.getUniformLocation(program, "backdrop"), ...BACKDROP);
     const buffer = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
     gl.bufferData(
@@ -65,66 +68,66 @@ export default function IceScene({ dark = false }: { dark?: boolean }) {
     const size = gl.getUniformLocation(program, "resolution"),
       clock = gl.getUniformLocation(program, "time"),
       mouse = gl.getUniformLocation(program, "pointer");
-    let stopped = false;
+    const target = { x: 0, y: 0 },
+      eased = { x: 0, y: 0 };
+    let frame = 0,
+      elapsed = 0,
+      last = performance.now();
     function draw() {
-      if (stopped) return;
       gl!.uniform2f(size, element!.width, element!.height);
-      gl!.uniform2f(mouse, 0, 0);
-      gl!.uniform1f(clock, 0);
+      gl!.uniform2f(mouse, eased.x, eased.y);
+      gl!.uniform1f(clock, elapsed);
       gl!.drawArrays(gl!.TRIANGLES, 0, 6);
     }
+    function tick(now: number) {
+      frame = requestAnimationFrame(tick);
+      const step = Math.min(now - last, 100) / 1000;
+      last = now;
+      // Skip work once the hero has scrolled away or the tab is hidden.
+      if (document.hidden || window.scrollY > window.innerHeight) return;
+      elapsed += step;
+      const ease = 1 - Math.exp(-step * 4);
+      eased.x += (target.x - eased.x) * ease;
+      eased.y += (target.y - eased.y) * ease;
+      draw();
+    }
     function resize() {
-      const ratio = Math.min(
-        window.devicePixelRatio,
-        1.5,
-        1920 / window.innerWidth,
-      );
+      const ratio = Math.min(window.devicePixelRatio, 1.25, 1600 / window.innerWidth);
       element!.width = Math.round(window.innerWidth * ratio);
       element!.height = Math.round(window.innerHeight * ratio);
       gl!.viewport(0, 0, element!.width, element!.height);
       draw();
     }
     const move = (event: PointerEvent) => {
-      if (!motion || window.scrollY > window.innerHeight) return;
-      // Move the cached render through the compositor instead of rerunning the shader.
-      const x = (event.clientX / window.innerWidth - 0.5) * 8;
-      const y = (event.clientY / window.innerHeight - 0.5) * 8;
-      element!.style.transform = `translate(${x}px, ${y}px) scale(1.02)`;
-    };
-    const visibility = () => {
-      if (!document.hidden) draw();
+      target.x = event.clientX / window.innerWidth - 0.5;
+      target.y = 0.5 - event.clientY / window.innerHeight;
     };
     const lost = (event: Event) => {
       event.preventDefault();
-      stopped = true;
+      cancelAnimationFrame(frame);
       setReady(false);
     };
-    element.style.transform = "scale(1.02)";
     resize();
     setReady(true);
+    if (motion) frame = requestAnimationFrame(tick);
     window.addEventListener("resize", resize);
-    window.addEventListener("pointermove", move, { passive: true });
-    document.addEventListener("visibilitychange", visibility);
+    if (motion) window.addEventListener("pointermove", move, { passive: true });
     element.addEventListener("webglcontextlost", lost);
     return () => {
-      stopped = true;
+      cancelAnimationFrame(frame);
       window.removeEventListener("resize", resize);
       window.removeEventListener("pointermove", move);
-      document.removeEventListener("visibilitychange", visibility);
       element.removeEventListener("webglcontextlost", lost);
       gl.deleteBuffer(buffer);
       gl.deleteProgram(program);
       gl.deleteShader(vertex);
       gl.deleteShader(fragment);
     };
-  }, [motion, dark]);
+  }, [motion]);
 
   return (
     <>
-      <div
-        className={`ice-scene ${dark ? "dark-scene" : ""} ${ready ? "scene-ready" : ""}`}
-        aria-hidden="true"
-      >
+      <div className={`ice-scene ${ready ? "scene-ready" : ""}`} aria-hidden="true">
         <svg className="scene-fallback" viewBox="0 0 1000 700">
           <defs>
             <linearGradient id="ice" x2="1" y2="1">
@@ -132,14 +135,7 @@ export default function IceScene({ dark = false }: { dark?: boolean }) {
               <stop offset="1" stopColor="#7d94a6" />
             </linearGradient>
           </defs>
-          <ellipse
-            cx="510"
-            cy="590"
-            rx="290"
-            ry="40"
-            fill="#758593"
-            opacity=".3"
-          />
+          <ellipse cx="510" cy="590" rx="290" ry="40" fill="#758593" opacity=".3" />
           <path
             d="M285 320 500 150 715 320 715 570 285 570Z"
             fill="url(#ice)"
@@ -157,7 +153,6 @@ export default function IceScene({ dark = false }: { dark?: boolean }) {
           <circle cx="480" cy="430" r="5" fill="#e3fffc" />
         </svg>
         <canvas ref={canvas} />
-        {!dark && <div className="snow-field snow-paused" />}
       </div>
       <button
         className="motion-control secondary"

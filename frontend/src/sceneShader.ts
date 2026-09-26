@@ -1,4 +1,4 @@
-// Original procedural snow scene. No downloaded models, textures, or rendering libraries.
+// Original procedural house scene. No downloaded models, textures, or rendering libraries.
 export const vertexShader = `
 attribute vec2 position;
 void main() { gl_Position = vec4(position, 0.0, 1.0); }
@@ -9,16 +9,12 @@ precision highp float;
 uniform vec2 resolution;
 uniform vec2 pointer;
 uniform float time;
-uniform float darkStage;
+uniform vec3 backdrop;
 
 float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123); }
 float noise(vec2 p) {
   vec2 i = floor(p), f = fract(p); f = f*f*(3.0-2.0*f);
   return mix(mix(hash(i), hash(i+vec2(1,0)), f.x), mix(hash(i+vec2(0,1)), hash(i+vec2(1,1)), f.x), f.y);
-}
-float terrain(vec2 p) {
-  float n = noise(p*.24)*1.7 + noise(p*.65)*.5 + noise(p*1.7)*.12;
-  return -.3 + n * smoothstep(2.2, 8.0, length(p));
 }
 float box(vec3 p, vec3 b, float r) {
   vec3 q = abs(p)-b+r;
@@ -27,7 +23,6 @@ float box(vec3 p, vec3 b, float r) {
 mat2 rot(float a) { return mat2(cos(a),-sin(a),sin(a),cos(a)); }
 vec2 scene(vec3 p) {
   vec2 result = vec2(100.0,1.0);
-  if(darkStage < .5) result = vec2((p.y-terrain(p.xz))*.65, 1.0);
   vec3 q = p-vec3(0,.98,0);
   float outer = box(q, vec3(1.34,1.15,1.1), .085);
   float inner = box(q-vec3(0,-.02,.15), vec3(1.06,.9,1.2), .035);
@@ -65,13 +60,17 @@ float shadow(vec3 p,vec3 light) {
 }
 void main() {
   vec2 uv=(gl_FragCoord.xy*2.0-resolution)/resolution.y;
-  float angle=.48+pointer.x*.12+sin(time*.12)*.035;
-  vec3 ro=vec3(sin(angle)*7.8,3.2+pointer.y*.25,cos(angle)*7.8);
+  float angle=.48+pointer.x*.18+sin(time*.3)*.28;
+  vec3 ro=vec3(sin(angle)*7.8,3.2+pointer.y*.35+sin(time*.21)*.12,cos(angle)*7.8);
   vec3 target=vec3(0,.95,0);
   vec3 forward=normalize(target-ro), right=normalize(cross(forward,vec3(0,1,0))), up=cross(right,forward);
   vec3 rd=normalize(forward*1.8+right*uv.x+up*uv.y);
-  vec3 sky=mix(vec3(.63,.68,.73),vec3(.84,.87,.89),clamp(rd.y+.4,0.0,1.0));
-  sky=mix(sky,vec3(0.0),darkStage);
+  // Match the page background, with a soft contact shadow so the house doesn't float.
+  vec3 sky=backdrop;
+  if(rd.y<0.0) {
+    vec2 floorHit=(ro+rd*((-.23-ro.y)/rd.y)).xz;
+    sky*=1.0-.12*exp(-dot(floorHit*vec2(.55,.7),floorHit*vec2(.55,.7)));
+  }
   float t=0.0; vec2 hit;
   for(int i=0;i<100;i++) { hit=scene(ro+rd*t); if(hit.x<.002 || t>40.0) break; t+=hit.x*.85; }
   vec3 color=sky;
@@ -80,19 +79,18 @@ void main() {
     float diffuse=max(dot(n,light),0.0), shade=shadow(p+n*.015,light);
     float grain=noise(p.xz*22.0)*.035;
     vec3 base=vec3(.70,.75,.80);
-    if(hit.y<1.5) base=vec3(.79,.82,.85)-grain;
     if(hit.y>1.5 && hit.y<2.5) base=vec3(.72,.79,.84)-grain;
     if(hit.y>3.5) base=vec3(.2,.28,.33);
     color=base*(.52+diffuse*.5*shade);
-    float spec=pow(max(dot(reflect(-light,n),-rd),0.0),hit.y<1.5?18.0:65.0);
+    float spec=pow(max(dot(reflect(-light,n),-rd),0.0),65.0);
     color+=vec3(.87,.94,1.0)*spec*.36;
     float interiorGlow=exp(-length(p-vec3(0,1,.2))*1.2);
     color+=vec3(.18,.28,.34)*interiorGlow;
     if(hit.y>2.5 && hit.y<3.5) color=vec3(.82,.96,1.0);
-    color=mix(color,sky,(1.0-exp(-t*.024))*(1.0-darkStage));
+    color=mix(color,sky,1.0-exp(-t*.024));
+    // Fine deterministic grain avoids texture downloads; the backdrop stays an exact match.
+    color+=(hash(gl_FragCoord.xy)-.5)*.004;
   }
-  // Fine deterministic grain avoids texture downloads.
-  color+=(hash(gl_FragCoord.xy)-.5)*.004*step(.01,length(color));
   gl_FragColor=vec4(color,1.0);
 }
 `;

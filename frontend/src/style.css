@@ -156,12 +156,10 @@ small,
   inset: 0;
   z-index: -1;
   pointer-events: none;
-  background: linear-gradient(160deg, #9cabb9, #d2dce3 65%, #8e9eac);
+  background: #f7f8f3;
   overflow: hidden;
 }
 .ice-scene canvas {
-  transition: transform 450ms ease-out;
-  transform: scale(1.02);
   width: 100%;
   height: 100%;
   opacity: 0;
@@ -179,26 +177,6 @@ small,
 }
 .scene-ready .scene-fallback {
   display: none;
-}
-.snow-field {
-  position: absolute;
-  inset: -100%;
-  opacity: 0.4;
-  background-image:
-    radial-gradient(1px 2px at 33px 45px, white 90%, transparent),
-    radial-gradient(1px 1px at 177px 125px, white 90%, transparent);
-  background-size:
-    251px 217px,
-    307px 293px;
-  animation: snowfall 28s linear infinite;
-}
-.snow-paused {
-  animation-play-state: paused;
-}
-@keyframes snowfall {
-  to {
-    transform: translate(100px, 217px);
-  }
 }
 .motion-control {
   position: fixed;
@@ -1049,9 +1027,6 @@ footer {
   isolation: isolate;
   color: #253e36;
   background: transparent;
-}
-.dark-scene {
-  background: #000;
 }
 .landing-header {
   position: fixed;
