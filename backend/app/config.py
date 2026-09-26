@@ -70,10 +70,16 @@ TWILIO_AUTH_TOKEN = os.getenv("TWILIO_AUTH_TOKEN", "")
 TWILIO_FROM_NUMBER = os.getenv("TWILIO_FROM_NUMBER", "")
 
 # Email fallback: used when no SMS provider is set up or every text fails.
-# For Gmail, SMTP_PASSWORD is an app password (Google Account > Security > App passwords).
+# RESEND_API_KEY sends over HTTPS (works on Railway, which blocks SMTP below the Pro plan).
+# Without it, SMTP is used. For Gmail, SMTP_PASSWORD is an app password.
+RESEND_API_KEY = os.getenv("RESEND_API_KEY", "")
+RESEND_API_URL = os.getenv("RESEND_API_URL", "https://api.resend.com/emails")
 SMTP_HOST = os.getenv("SMTP_HOST", "smtp.gmail.com")
 SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
 SMTP_USER = os.getenv("SMTP_USER", "")
 SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "")
-EMAIL_FROM = os.getenv("EMAIL_FROM", "") or SMTP_USER
+# Resend's free tier sends from onboarding@resend.dev, only to the account's own address.
+EMAIL_FROM = os.getenv("EMAIL_FROM", "") or (
+    "StillHere <onboarding@resend.dev>" if RESEND_API_KEY else SMTP_USER
+)
 ALERT_EMAILS = [e.strip() for e in os.getenv("ALERT_EMAILS", "").split(",") if e.strip()]

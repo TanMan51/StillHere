@@ -4,7 +4,8 @@ send_sms() picks the first configured provider: SimpleTexting (SIMPLETEXTING_API
 then Textbelt (TEXTBELT_API_KEY), then Twilio (TWILIO_*). With none, it only logs the
 text (dry run), so local dev and tests never send real messages.
 
-send_email() goes to ALERT_EMAILS over SMTP. Callers use it when no SMS provider is
+send_email() goes to ALERT_EMAILS through Resend's HTTPS API when RESEND_API_KEY is
+set, otherwise over SMTP. Callers use it when no SMS provider is
 set up or every text failed.
 """
 
@@ -21,6 +22,9 @@ from email.message import EmailMessage
 from . import config
 
 log = logging.getLogger("stillhere.notify")
+
+# Some providers sit behind bot filters that reject urllib's default User-Agent.
+USER_AGENT = "StillHere/1.0"
 
 
 class SmsError(Exception):
@@ -40,11 +44,50 @@ def textbelt_configured() -> bool:
 
 
 def email_configured() -> bool:
-    return bool(config.SMTP_USER and config.SMTP_PASSWORD and config.ALERT_EMAILS)
+    smtp = bool(config.SMTP_USER and config.SMTP_PASSWORD)
+    return bool(config.ALERT_EMAILS) and (bool(config.RESEND_API_KEY) or smtp)
 
 
 def send_email(subject: str, body: str) -> str:
     """Email every address in ALERT_EMAILS. Returns the channel used ("email")."""
+    if config.RESEND_API_KEY:
+        _send_resend(subject, body)
+    else:
+        _send_smtp(subject, body)
+    log.info("email to %s sent: %s", ", ".join(config.ALERT_EMAILS), subject)
+    return "email"
+
+
+def _send_resend(subject: str, body: str) -> None:
+    payload = {
+        "from": config.EMAIL_FROM,
+        "to": config.ALERT_EMAILS,
+        "subject": subject,
+        "text": body,
+    }
+    request = urllib.request.Request(
+        config.RESEND_API_URL,
+        data=json.dumps(payload).encode(),
+        headers={
+            "Authorization": f"Bearer {config.RESEND_API_KEY}",
+            "Content-Type": "application/json",
+            "User-Agent": USER_AGENT,
+        },
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=15) as response:
+            response.read()
+    except urllib.error.HTTPError as e:
+        detail = e.read().decode(errors="replace")[:300]
+        log.error("email failed: Resend HTTP %s: %s", e.code, detail)
+        raise EmailError(f"Resend error {e.code}: {detail}") from e
+    except urllib.error.URLError as e:
+        log.error("email failed: Resend unreachable: %s", e.reason)
+        raise EmailError(f"Resend unreachable: {e.reason}") from e
+
+
+def _send_smtp(subject: str, body: str) -> None:
     msg = EmailMessage()
     msg["Subject"] = subject
     msg["From"] = config.EMAIL_FROM
@@ -58,8 +101,6 @@ def send_email(subject: str, body: str) -> str:
     except (smtplib.SMTPException, OSError) as e:
         log.error("email to %s failed: %s", msg["To"], e)
         raise EmailError(f"Email failed: {e}") from e
-    log.info("email to %s sent: %s", msg["To"], subject)
-    return "email"
 
 
 def simpletexting_configured() -> bool:
@@ -105,6 +146,7 @@ def _send_simpletexting(to: str, body: str) -> None:
             "Authorization": f"Bearer {config.SIMPLETEXTING_API_KEY}",
             "Content-Type": "application/json",
             "Accept": "application/json",
+            "User-Agent": USER_AGENT,
         },
         method="POST",
     )
@@ -125,7 +167,9 @@ def _send_textbelt(to: str, body: str) -> None:
     data = urllib.parse.urlencode(
         {"phone": to, "message": body, "key": config.TEXTBELT_API_KEY}
     ).encode()
-    request = urllib.request.Request(config.TEXTBELT_API_URL, data=data, method="POST")
+    request = urllib.request.Request(
+        config.TEXTBELT_API_URL, data=data, headers={"User-Agent": USER_AGENT}, method="POST"
+    )
     try:
         with urllib.request.urlopen(request, timeout=15) as response:
             result = json.loads(response.read().decode(errors="replace"))

@@ -377,3 +377,23 @@ def test_textbelt_request_and_error(monkeypatch):
     _fake_urlopen(monkeypatch, b'{"success": false, "error": "Out of quota"}')
     with pytest.raises(notify.SmsError, match="Out of quota"):
         notify.send_sms("+14045550123", "hello")
+
+
+def test_resend_email_request(monkeypatch):
+    import json
+
+    from app import config, notify
+
+    monkeypatch.setattr(config, "RESEND_API_KEY", "re_test")
+    monkeypatch.setattr(config, "EMAIL_FROM", "StillHere <onboarding@resend.dev>")
+    monkeypatch.setattr(config, "ALERT_EMAILS", ["family@example.com"])
+    sent = _fake_urlopen(monkeypatch, b'{"id": "email-1"}')
+    assert notify.email_configured() is True
+    assert notify.send_email("StillHere alert", "hello") == "email"
+    assert sent["url"] == config.RESEND_API_URL
+    assert json.loads(sent["data"]) == {
+        "from": "StillHere <onboarding@resend.dev>",
+        "to": ["family@example.com"],
+        "subject": "StillHere alert",
+        "text": "hello",
+    }
