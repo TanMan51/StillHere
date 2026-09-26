@@ -28,6 +28,21 @@ _ADDED_COLUMNS = {
     "community": {
         "watch_after_minutes": "INTEGER NOT NULL DEFAULT 240",
         "worry_after_minutes": "INTEGER NOT NULL DEFAULT 480",
+        "on_call_phone": "VARCHAR",
+        "escalate_after_minutes": "INTEGER NOT NULL DEFAULT 10",
+        "checkin_time": "VARCHAR NOT NULL DEFAULT '10:00'",
+    },
+    "resident": {
+        "family_notify": "VARCHAR NOT NULL DEFAULT 'immediately'",
+    },
+    "alert": {
+        "acknowledged_at": "DATETIME",
+        "acknowledged_by": "VARCHAR",
+        "escalation_level": "INTEGER NOT NULL DEFAULT 0",
+        "escalate_at_real": "DATETIME",
+    },
+    "contact": {
+        "resident_id": "VARCHAR REFERENCES resident(id)",
     },
 }
 

@@ -25,22 +25,30 @@ def get_community(
     session: Session = Depends(get_session), user: User = Depends(auth.require_provider)
 ):
     found = _community(session, user)
+    units = community.grid(session, found)
+    alerts = community.recent_alerts(session, [u["resident_id"] for u in units])
     return {
         "server_now": clock.iso(clock.now()),
         "community": community.community_dict(found),
-        "units": community.grid(session, found),
+        "units": units,
+        "checkin": community.checkin_list(found, units),
+        "response_times": community.response_times(alerts),
     }
 
 
-class ThresholdPatch(BaseModel):
+class CommunityPatch(BaseModel):
     # Up to a week, in minutes.
     watch_after_minutes: int | None = Field(default=None, ge=1, le=10080)
     worry_after_minutes: int | None = Field(default=None, ge=1, le=10080)
+    # E.164, or "" to clear it (urgent alerts then go straight to family).
+    on_call_phone: str | None = Field(default=None, pattern=r"^(\+[1-9]\d{6,14})?$")
+    escalate_after_minutes: int | None = Field(default=None, ge=1, le=240)
+    checkin_time: str | None = Field(default=None, pattern=r"^([01]\d|2[0-3]):[0-5]\d$")
 
 
 @router.patch("/community")
 def patch_community(
-    body: ThresholdPatch,
+    body: CommunityPatch,
     session: Session = Depends(get_session),
     user: User = Depends(auth.require_provider),
 ):
@@ -50,6 +58,12 @@ def patch_community(
     if watch >= worry:
         raise HTTPException(422, "The yellow threshold must come before the red one")
     found.watch_after_minutes, found.worry_after_minutes = watch, worry
+    if body.on_call_phone is not None:
+        found.on_call_phone = body.on_call_phone or None
+    if body.escalate_after_minutes is not None:
+        found.escalate_after_minutes = body.escalate_after_minutes
+    if body.checkin_time is not None:
+        found.checkin_time = body.checkin_time
     session.add(found)
     session.commit()
     session.refresh(found)

@@ -1,10 +1,13 @@
 {
-  "server_now": "2026-09-26T20:15:41Z",
+  "server_now": "2026-09-26T21:07:28Z",
   "community": {
     "id": "maple-grove",
     "name": "Maple Grove Senior Living",
     "watch_after_minutes": 240,
-    "worry_after_minutes": 480
+    "worry_after_minutes": 480,
+    "on_call_phone": null,
+    "escalate_after_minutes": 10,
+    "checkin_time": "10:00"
   },
   "units": [
     {
@@ -15,17 +18,39 @@
       "unit": "101",
       "state": "fine",
       "minutes_since_motion": 10,
-      "last_motion_at": "2026-09-26T20:05:41Z",
+      "last_motion_at": "2026-09-26T20:57:27Z",
       "last_event": {
         "type": "motion",
         "value": null,
-        "ts": "2026-09-26T20:05:41Z"
+        "ts": "2026-09-26T20:57:27Z"
       },
       "online": true,
-      "last_heartbeat_at": "2026-09-26T20:15:41Z",
+      "last_heartbeat_at": "2026-09-26T21:07:27Z",
       "device_id": "sim-101",
       "device_status": "ok",
-      "active_alert": null
+      "active_alert": null,
+      "activity_lower_than_usual": false
+    },
+    {
+      "resident_id": "mg-102",
+      "first_name": "Dolores",
+      "last_name": "Kim",
+      "floor": 1,
+      "unit": "102",
+      "state": "fine",
+      "minutes_since_motion": 47,
+      "last_motion_at": "2026-09-26T20:20:27Z",
+      "last_event": {
+        "type": "motion",
+        "value": null,
+        "ts": "2026-09-26T20:20:27Z"
+      },
+      "online": true,
+      "last_heartbeat_at": "2026-09-26T21:07:27Z",
+      "device_id": "sim-102",
+      "device_status": "ok",
+      "active_alert": null,
+      "activity_lower_than_usual": true
     },
     {
       "resident_id": "mg-103",
@@ -35,17 +60,18 @@
       "unit": "103",
       "state": "watch",
       "minutes_since_motion": 316,
-      "last_motion_at": "2026-09-26T14:59:41Z",
+      "last_motion_at": "2026-09-26T15:51:27Z",
       "last_event": {
         "type": "motion",
         "value": null,
-        "ts": "2026-09-26T14:59:41Z"
+        "ts": "2026-09-26T15:51:27Z"
       },
       "online": true,
-      "last_heartbeat_at": "2026-09-26T20:15:41Z",
+      "last_heartbeat_at": "2026-09-26T21:07:27Z",
       "device_id": "sim-103",
       "device_status": "ok",
-      "active_alert": null
+      "active_alert": null,
+      "activity_lower_than_usual": false
     },
     {
       "resident_id": "mg-106",
@@ -55,17 +81,18 @@
       "unit": "106",
       "state": "worry",
       "minutes_since_motion": 765,
-      "last_motion_at": "2026-09-26T07:30:41Z",
+      "last_motion_at": "2026-09-26T08:22:27Z",
       "last_event": {
         "type": "motion",
         "value": null,
-        "ts": "2026-09-26T07:30:41Z"
+        "ts": "2026-09-26T08:22:27Z"
       },
       "online": true,
-      "last_heartbeat_at": "2026-09-26T20:15:41Z",
+      "last_heartbeat_at": "2026-09-26T21:07:27Z",
       "device_id": "sim-106",
       "device_status": "ok",
-      "active_alert": null
+      "active_alert": null,
+      "activity_lower_than_usual": false
     },
     {
       "resident_id": "mg-208",
@@ -75,17 +102,18 @@
       "unit": "208",
       "state": "offline",
       "minutes_since_motion": 190,
-      "last_motion_at": "2026-09-26T17:05:41Z",
+      "last_motion_at": "2026-09-26T17:57:27Z",
       "last_event": {
         "type": "motion",
         "value": null,
-        "ts": "2026-09-26T17:05:41Z"
+        "ts": "2026-09-26T17:57:27Z"
       },
       "online": false,
-      "last_heartbeat_at": "2026-09-26T17:45:41Z",
+      "last_heartbeat_at": "2026-09-26T18:37:27Z",
       "device_id": "sim-208",
       "device_status": "ok",
-      "active_alert": null
+      "active_alert": null,
+      "activity_lower_than_usual": false
     },
     {
       "resident_id": "mg-305",
@@ -95,26 +123,41 @@
       "unit": "305",
       "state": "urgent",
       "minutes_since_motion": 25,
-      "last_motion_at": "2026-09-26T19:50:41Z",
+      "last_motion_at": "2026-09-26T20:42:27Z",
       "last_event": {
         "type": "reply",
         "value": "help",
-        "ts": "2026-09-26T20:14:41Z"
+        "ts": "2026-09-26T21:06:27Z"
       },
       "online": true,
-      "last_heartbeat_at": "2026-09-26T20:15:41Z",
+      "last_heartbeat_at": "2026-09-26T21:07:27Z",
       "device_id": "sim-305",
       "device_status": "urgent",
       "active_alert": {
-        "id": 1,
+        "id": 4,
         "device_id": "sim-305",
         "kind": "urgent",
         "message": "URGENT from StillHere: Chester in apartment 305 asked for help. Please check in now.",
         "sms_sent": false,
-        "sent_at": "2026-09-26T20:14:41Z",
+        "sent_at": "2026-09-26T21:06:27Z",
         "resolved_at": null,
-        "resolved_by": null
-      }
+        "resolved_by": null,
+        "acknowledged_at": null,
+        "acknowledged_by": null,
+        "escalation_level": 0
+      },
+      "activity_lower_than_usual": false
     }
-  ]
+  ],
+  "checkin": {
+    "time": "10:00",
+    "since": "2026-09-26T14:00:00Z",
+    "resident_ids": ["mg-204", "mg-106", "mg-301"]
+  },
+  "response_times": {
+    "alerts": 5,
+    "acknowledged": 4,
+    "average_acknowledge_seconds": 255,
+    "average_resolve_seconds": 840
+  }
 }

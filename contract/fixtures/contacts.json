@@ -3,12 +3,14 @@
     "id": 1,
     "name": "Sam Rivera",
     "phone": "+14045550123",
-    "created_at": "2026-09-25T20:02:14Z"
+    "created_at": "2026-09-25T20:02:14Z",
+    "resident_id": "mg-204"
   },
   {
     "id": 2,
     "name": "Priya Rivera",
     "phone": "+16785550187",
-    "created_at": "2026-09-25T20:03:40Z"
+    "created_at": "2026-09-25T20:03:40Z",
+    "resident_id": "mg-204"
   }
 ]

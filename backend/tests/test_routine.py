@@ -154,3 +154,55 @@ def test_dst_history_and_next_alert_are_consistent() -> None:
     alert_at = next_alert_time(baseline, history[-1], end, LIMIT)
     assert alert_at >= end
     assert evaluate(baseline, history[-1], alert_at, LIMIT, "Fridge").irregular
+
+
+# --- Wellness trends (routine/trends.py) ---
+
+TREND_NOW = datetime(2026, 9, 26, 15, 0, tzinfo=timezone.utc)
+
+
+def _daily(per_day: list[int]) -> list[datetime]:
+    """per_day[0] is 29 days ago, per_day[-1] today; events at local noon-ish."""
+    zone = ZoneInfo("America/New_York")
+    today = TREND_NOW.astimezone(zone).date()
+    times = []
+    for offset, count in enumerate(per_day):
+        day = today - timedelta(days=len(per_day) - 1 - offset)
+        for i in range(count):
+            local = datetime(day.year, day.month, day.day, 8, tzinfo=zone) + timedelta(minutes=i)
+            times.append(local.astimezone(timezone.utc))
+    return times
+
+
+def test_daily_counts_cover_thirty_local_days():
+    from app.routine import daily_counts
+
+    counts = daily_counts(_daily([2] * 30), TREND_NOW, "America/New_York")
+    assert len(counts) == 30
+    assert all(c == 2 for _, c in counts)
+
+
+def test_steady_activity_is_not_flagged():
+    from app.routine import activity_trend
+
+    trend = activity_trend(_daily([10] * 30), TREND_NOW, "America/New_York")
+    assert trend.recent_daily_average == 10 and trend.prior_daily_average == 10
+    assert not trend.lower_than_usual and trend.note is None
+
+
+def test_drop_against_own_average_is_flagged_without_medical_wording():
+    from app.routine import activity_trend
+
+    trend = activity_trend(_daily([10] * 22 + [3] * 7 + [1]), TREND_NOW, "America/New_York")
+    assert trend.lower_than_usual
+    assert trend.note.startswith("Activity lower than usual")
+    for word in ("health", "sick", "decline", "diagnos", "ill"):
+        assert word not in trend.note.lower()
+
+
+def test_too_little_history_is_never_flagged():
+    from app.routine import activity_trend
+
+    trend = activity_trend(_daily([1] * 23 + [0] * 7), TREND_NOW, "America/New_York")
+    assert not trend.lower_than_usual  # prior average below the minimum to compare against
+    assert activity_trend([], TREND_NOW, "America/New_York").recent_daily_average == 0

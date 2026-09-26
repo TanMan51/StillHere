@@ -11,7 +11,7 @@ from datetime import timedelta
 
 from sqlmodel import Session, select
 
-from . import clock, config, messages, passwords
+from . import clock, config, messages, passwords, routine
 from .models import Alert, Community, Device, Event, Resident, User
 
 COMMUNITY_ID = "maple-grove"
@@ -63,6 +63,20 @@ SEEDED_STATES = {
     "208": "offline",
     "305": "urgent",
 }
+
+
+# Residents whose last week is much quieter than the three weeks before, so the wellness
+# trend flags "activity lower than usual" for them.
+QUIETER_LATELY = {"102", "303"}
+# Past alerts staff already handled, for response times and visit summaries:
+# unit -> (kind, days ago, minutes to "I'm on it", minutes to resolved).
+PAST_ALERTS = {
+    "104": ("urgent", 6, 3, 12),
+    "201": ("no_reply", 13, 5, 9),
+    "306": ("urgent", 21, 2, 15),
+    "107": ("no_reply", 3, 7, 20),
+}
+HISTORY_DAYS = 30
 
 
 def units() -> list[tuple[int, str]]:
@@ -169,6 +183,9 @@ def seed_states(session: Session) -> None:
             device.last_heartbeat_at = now
         session.add(device)
         session.add(Event(device_id=device.id, type="motion", ts=device.last_motion_at))
+        _seed_history(session, device, index, quieter=unit in QUIETER_LATELY)
+        if unit in PAST_ALERTS:
+            _seed_past_alert(session, device, resident, unit, now)
         if state == "urgent":
             asked = now - timedelta(minutes=1)
             session.add(Event(device_id=device.id, type="reply", value="help", ts=asked))
@@ -183,3 +200,45 @@ def seed_states(session: Session) -> None:
                 )
             )
     session.commit()
+
+
+def _seed_history(session: Session, device: Device, index: int, *, quieter: bool) -> None:
+    """A month of everyday movement ending at the device's last movement."""
+    end = clock.as_utc(device.last_motion_at)
+    times = routine.generate_week(
+        end, config.HOUSEHOLD_TZ, days=HISTORY_DAYS, object_type="fridge", seed=index
+    )
+    recent = end - timedelta(days=7)
+    for i, t in enumerate(times):
+        # Quieter lately: keep one in three movements from the last week.
+        if t >= end or (quieter and t >= recent and i % 3):
+            continue
+        session.add(Event(device_id=device.id, type="motion", ts=t))
+
+
+def _seed_past_alert(session: Session, device: Device, resident: Resident, unit: str, now) -> None:
+    kind, days_ago, acknowledge, resolve = PAST_ALERTS[unit]
+    sent = now - timedelta(days=days_ago, hours=index_hour(unit))
+    message = (
+        messages.resident_urgent(resident.first_name, unit)
+        if kind == "urgent"
+        else messages.resident_no_reply(resident.first_name, unit)
+    )
+    session.add(
+        Alert(
+            device_id=device.id,
+            kind=kind,
+            message=message,
+            sms_sent=False,
+            sent_at=sent,
+            acknowledged_at=sent + timedelta(minutes=acknowledge),
+            acknowledged_by="Maple Grove wellness staff",
+            resolved_at=sent + timedelta(minutes=resolve),
+            resolved_by="staff",
+        )
+    )
+
+
+def index_hour(unit: str) -> int:
+    """A stable hour offset per apartment, so past alerts don't all share a time of day."""
+    return int(unit) % 9 + 2

@@ -1,0 +1,82 @@
+{
+  "server_now": "2026-09-26T21:07:28Z",
+  "resident": {
+    "id": "mg-102",
+    "community_id": "maple-grove",
+    "first_name": "Dolores",
+    "last_name": "Kim",
+    "floor": 1,
+    "unit": "102",
+    "share_alerts_with_family": true,
+    "share_activity_with_family": true,
+    "family_notify": "immediately",
+    "device_ids": ["sim-102"]
+  },
+  "community_name": "Maple Grove Senior Living",
+  "timezone": "America/New_York",
+  "unit": {
+    "resident_id": "mg-102",
+    "first_name": "Dolores",
+    "last_name": "Kim",
+    "floor": 1,
+    "unit": "102",
+    "state": "fine",
+    "minutes_since_motion": 47,
+    "last_motion_at": "2026-09-26T20:20:27Z",
+    "last_event": {
+      "type": "motion",
+      "value": null,
+      "ts": "2026-09-26T20:20:27Z"
+    },
+    "online": true,
+    "last_heartbeat_at": "2026-09-26T21:07:27Z",
+    "device_id": "sim-102",
+    "device_status": "ok",
+    "active_alert": null,
+    "activity_lower_than_usual": true
+  },
+  "devices": [
+    {
+      "id": "sim-102",
+      "name": "Dolores's apartment",
+      "object_type": "door",
+      "status": "ok",
+      "online": true
+    }
+  ],
+  "trend": {
+    "days": [
+      {
+        "date": "2026-09-22",
+        "count": 4
+      },
+      {
+        "date": "2026-09-23",
+        "count": 3
+      },
+      {
+        "date": "2026-09-24",
+        "count": 3
+      },
+      {
+        "date": "2026-09-25",
+        "count": 4
+      },
+      {
+        "date": "2026-09-26",
+        "count": 2
+      }
+    ],
+    "recent_daily_average": 3.9,
+    "prior_daily_average": 10.0,
+    "lower_than_usual": true,
+    "note": "Activity lower than usual: about 3.9 movements a day this week, compared with 10 over the three weeks before."
+  },
+  "alerts": [],
+  "response_times": {
+    "alerts": 0,
+    "acknowledged": 0,
+    "average_acknowledge_seconds": null,
+    "average_resolve_seconds": null
+  }
+}

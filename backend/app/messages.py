@@ -33,6 +33,17 @@ def resident_urgent(first_name: str, unit: str) -> str:
     )
 
 
+def escalated(original: str, minutes: int) -> str:
+    return f"StillHere: not yet acknowledged after {minutes} minutes. {original}"
+
+
+def resident_no_reply(first_name: str, unit: str) -> str:
+    return (
+        f"StillHere: Loud sound in apartment {unit} ({first_name}), and no reply when asked "
+        "if they're okay. Please check in."
+    )
+
+
 def _trigger_phrase(trigger: str) -> str:
     return "Possible fall detected" if trigger == "fall" else "Loud sound"
 

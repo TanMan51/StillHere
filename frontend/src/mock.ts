@@ -4,10 +4,12 @@ import contactFixture from "../../contract/fixtures/contacts.json";
 import loginFixture from "../../contract/fixtures/auth_login.json";
 import residentFixture from "../../contract/fixtures/residents.json";
 import communityFixture from "../../contract/fixtures/community.json";
+import summaryFixture from "../../contract/fixtures/resident_summary.json";
 import { loadSession } from "./session";
 import type {
   Baseline,
   CommunityResponse,
+  ResidentSummary,
   Contact,
   Demo,
   Device,
@@ -92,6 +94,19 @@ export async function mockRequest(path: string, method: string, raw?: unknown): 
       user?.role === "family" ? residents.filter((r) => r.id === user.resident_id) : residents,
     );
   }
+  if (parts[0] === "residents" && parts[2] === "summary") {
+    // Preview mode has one sample summary; it stands in for every resident.
+    return response({ ...(summaryFixture as ResidentSummary), server_now });
+  }
+  if (parts[0] === "alerts" && parts[2] === "acknowledge") {
+    const alert = community.units.find(
+      (u) => u.active_alert?.id === Number(parts[1]),
+    )?.active_alert;
+    if (!alert) throw new Error("Active alert not found");
+    alert.acknowledged_at = server_now;
+    alert.acknowledged_by = loadSession()?.user.name ?? "Staff";
+    return response(alert);
+  }
   if (parts[0] === "residents" && method === "PATCH") {
     const resident = residents.find((r) => r.id === decodeURIComponent(parts[1]));
     if (!resident) throw new Error("Resident not found");
@@ -108,8 +123,10 @@ export async function mockRequest(path: string, method: string, raw?: unknown): 
       const watch = Number(body.watch_after_minutes ?? community.community.watch_after_minutes);
       const worry = Number(body.worry_after_minutes ?? community.community.worry_after_minutes);
       if (watch >= worry) throw new Error("The yellow threshold must come before the red one");
-      community.community.watch_after_minutes = watch;
-      community.community.worry_after_minutes = worry;
+      Object.assign(community.community, body, {
+        watch_after_minutes: watch,
+        worry_after_minutes: worry,
+      });
       return response(community.community);
     }
     return response({ ...community, server_now });
@@ -151,6 +168,7 @@ export async function mockRequest(path: string, method: string, raw?: unknown): 
       name: String(body.name),
       phone: String(body.phone),
       created_at: server_now,
+      resident_id: loadSession()?.user.resident_id ?? null,
     };
     contacts.push(contact);
     return response(contact);

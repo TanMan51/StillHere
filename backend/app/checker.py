@@ -12,7 +12,7 @@ import logging
 from apscheduler.schedulers.background import BackgroundScheduler
 from sqlmodel import Session, col, select
 
-from . import alerts, clock, config
+from . import alerts, clock, config, routing
 from .db import engine
 from .models import Device
 
@@ -38,11 +38,18 @@ def heartbeat_simulated() -> None:
         session.commit()
 
 
+def escalate_alerts() -> None:
+    with Session(engine) as session:
+        routing.escalate_due(session)
+        session.commit()
+
+
 def check_all() -> None:
-    try:
-        heartbeat_simulated()
-    except Exception:
-        log.exception("simulated heartbeats failed")
+    for step in (heartbeat_simulated, escalate_alerts):
+        try:
+            step()
+        except Exception:
+            log.exception("%s failed", step.__name__)
     with Session(engine) as session:
         device_ids = session.exec(select(Device.id).where(Device.simulated == False)).all()  # noqa: E712
     for device_id in device_ids:

@@ -14,6 +14,12 @@ class Community(SQLModel, table=True):
     # worry_after on, worry (red). Minutes of demo-clock time since the last movement.
     watch_after_minutes: int = 240
     worry_after_minutes: int = 480
+    # Urgent alerts page the on-call phone first. Unacknowledged after escalate_after_minutes
+    # (real minutes, like the reply window), they escalate to the next contact.
+    on_call_phone: str | None = None
+    escalate_after_minutes: int = 10
+    # Morning check-in list: residents with no movement since this local time ("HH:MM").
+    checkin_time: str = "10:00"
 
 
 class Resident(SQLModel, table=True):
@@ -26,6 +32,9 @@ class Resident(SQLModel, table=True):
     # What family caregivers may see. Staff in the resident's community always see everything.
     share_alerts_with_family: bool = True
     share_activity_with_family: bool = True
+    # When family hears about urgent alerts: "immediately" (with staff) or "if_unanswered"
+    # (only when staff haven't acknowledged within the community's escalation window).
+    family_notify: str = "immediately"
 
 
 class User(SQLModel, table=True):
@@ -77,10 +86,18 @@ class Alert(SQLModel, table=True):
     sent_at: datetime
     resolved_at: datetime | None = None
     resolved_by: str | None = None
+    # Staff response: "I'm on it" records who and when; escalation stops once acknowledged.
+    acknowledged_at: datetime | None = None
+    acknowledged_by: str | None = None
+    escalation_level: int = 0
+    # Internal, real time (not in the contract): when an unacknowledged alert escalates next.
+    escalate_at_real: datetime | None = None
 
 
 class Contact(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
     name: str
     phone: str
+    # The resident this family contact follows. Null: every alert, as before accounts existed.
+    resident_id: str | None = Field(default=None, foreign_key="resident.id", index=True)
     created_at: datetime

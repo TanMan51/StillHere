@@ -131,16 +131,19 @@ DeviceDetail is the Device object plus:
 
 **Alert object**
 
-| Field         | Type                                                      | Notes                                                           |
-| ------------- | --------------------------------------------------------- | --------------------------------------------------------------- |
-| `id`          | integer                                                   |                                                                 |
-| `device_id`   | string                                                    |                                                                 |
-| `kind`        | alert kind                                                |                                                                 |
-| `message`     | string                                                    | The text that was sent (or would have been, for `false_alarm`). |
-| `sms_sent`    | boolean                                                   | False for `false_alarm` and dashboard-only entries.             |
-| `sent_at`     | timestamp                                                 |                                                                 |
-| `resolved_at` | timestamp or null                                         |                                                                 |
-| `resolved_by` | `"motion"`, `"reply"`, `"family"`, `"heartbeat"`, or null |                                                                 |
+| Field              | Type                                                                 | Notes                                                           |
+| ------------------ | -------------------------------------------------------------------- | --------------------------------------------------------------- |
+| `id`               | integer                                                              |                                                                 |
+| `device_id`        | string                                                               |                                                                 |
+| `kind`             | alert kind                                                           |                                                                 |
+| `message`          | string                                                               | The text that was sent (or would have been, for `false_alarm`). |
+| `sms_sent`         | boolean                                                              | False for `false_alarm` and dashboard-only entries.             |
+| `sent_at`          | timestamp                                                            |                                                                 |
+| `resolved_at`      | timestamp or null                                                    |                                                                 |
+| `resolved_by`      | `"motion"`, `"reply"`, `"family"`, `"staff"`, `"heartbeat"`, or null | `"staff"`: a healthcare provider marked the resident okay.      |
+| `acknowledged_at`  | timestamp or null                                                    | When staff said "I'm on it".                                    |
+| `acknowledged_by`  | string or null                                                       | Name of the staff member who acknowledged.                      |
+| `escalation_level` | integer                                                              | 0, then +1 each time an unacknowledged urgent alert escalates.  |
 
 **Baseline object**
 
@@ -162,10 +165,17 @@ Response: `{"server_now": timestamp, "device": Device}`
 ### `POST /api/alerts/{id}/resolve`
 
 Family marks an alert as handled ("I called, she's fine"). Sets `resolved_by: "family"` and
-returns the device to `ok` if nothing else is active. The check-in also counts as activity: it
-adds a `motion` event and sets `last_motion_at`, restarting the inactivity countdown. No body.
+returns the device to `ok` if nothing else is active. No body.
 
 Response: `{"ok": true}`
+
+### `POST /api/alerts/{id}/acknowledge`
+
+Staff's "I'm on it" (provider token only; `403` for family). Records `acknowledged_at` and
+`acknowledged_by` (the staff member's name) and stops escalation. Acknowledging again changes
+nothing. No body.
+
+Response: Alert
 
 ### Accounts and roles
 
@@ -190,43 +200,72 @@ null; set for family caregivers).
 - `GET /api/residents` → `[Resident]`, the residents the caller may see, by floor then unit
   (see `fixtures/residents.json`).
 - `PATCH /api/residents/{id}`, body (all optional) `{"share_alerts_with_family": boolean,
-"share_activity_with_family": boolean}` → Resident.
+"share_activity_with_family": boolean, "family_notify": "immediately" | "if_unanswered"}` →
+  Resident.
+- `GET /api/residents/{id}/summary` → everything for the resident page and the printable visit
+  summary (see `fixtures/resident_summary.json`, whose trend is cut to 5 days):
+  `{"server_now", "resident": Resident, "community_name": string or null, "timezone": IANA name,
+"unit": Unit or null,
+"devices": [{"id", "name", "object_type", "status", "online"}], "trend": Trend or null,
+"alerts": [Alert], "response_times": ResponseTimes}`. `alerts` covers the last 30 days, newest
+  first. For family caregivers, `trend` is null and `alerts` empty when the resident doesn't
+  share activity or alerts.
+
+**Trend object:** `days` (30 × `{"date": "YYYY-MM-DD", "count": integer}`, oldest first, local
+dates; the last is today, still in progress), `recent_daily_average` and
+`prior_daily_average` (numbers or null: the last 7 full days and the 21 before),
+`lower_than_usual` (boolean), `note` (string or null). The flag compares a resident only with
+their own past, and its wording is never medical: "Activity lower than usual…".
 
 **Resident object:** `id` (string), `community_id` (string or null), `first_name`,
 `last_name`, `floor` (integer or null), `unit` (string or null), `share_alerts_with_family`
-(boolean, default true), `share_activity_with_family` (boolean, default true), `device_ids`
-([string]).
+(boolean, default true), `share_activity_with_family` (boolean, default true), `family_notify`
+(`"immediately"` or `"if_unanswered"`, default `"immediately"`: when family hears about urgent
+alerts in a community with an on-call phone), `device_ids` ([string]).
 
 ### Community (healthcare providers)
 
 Both endpoints need a provider token: `401` without a login, `403` for family caregivers.
 
-- `GET /api/community` → `{"server_now": timestamp, "community": Community, "units": [Unit]}`,
-  units by floor then unit (see `fixtures/community.json`, which shows one unit per state).
+- `GET /api/community` → `{"server_now": timestamp, "community": Community, "units": [Unit],
+"checkin": Checkin, "response_times": ResponseTimes}`, units by floor then unit (see
+  `fixtures/community.json`, which shows one unit per state).
 - `PATCH /api/community`, body (all optional) `{"watch_after_minutes": integer 1–10080,
-"worry_after_minutes": integer 1–10080}` → Community. `422` unless watch comes before worry.
+"worry_after_minutes": integer 1–10080, "on_call_phone": E.164 string or "" to clear,
+"escalate_after_minutes": integer 1–240, "checkin_time": "HH:MM"}` → Community. `422` unless
+  watch comes before worry.
 
 **Community object:** `id`, `name`, `watch_after_minutes` (default 240), `worry_after_minutes`
-(default 480).
+(default 480), `on_call_phone` (string or null), `escalate_after_minutes` (default 10),
+`checkin_time` (local `"HH:MM"`, default `"10:00"`).
+
+**Checkin object** (the morning check-in list): `time` (`"HH:MM"`), `since` (timestamp: the
+latest occurrence of that local time, today's once it has passed, otherwise yesterday's),
+`resident_ids` ([string]: residents with no movement since then, longest inactivity first).
+
+**ResponseTimes object:** `alerts` (integer, alerts in the last 30 days), `acknowledged`
+(integer), `average_acknowledge_seconds` (integer or null: sent to "I'm on it"),
+`average_resolve_seconds` (integer or null: sent to resolved, over acknowledged alerts).
 
 **Unit object** (one apartment and its resident):
 
-| Field                  | Type                                          | Notes                                                                                 |
-| ---------------------- | --------------------------------------------- | ------------------------------------------------------------------------------------- |
-| `resident_id`          | string                                        |                                                                                       |
-| `first_name`           | string                                        |                                                                                       |
-| `last_name`            | string                                        |                                                                                       |
-| `floor`                | integer or null                               |                                                                                       |
-| `unit`                 | string or null                                | Apartment number, e.g. `"204"`.                                                       |
-| `state`                | `fine`, `watch`, `worry`, `offline`, `urgent` | See below. The dashboard displays it and never recomputes it.                         |
-| `minutes_since_motion` | integer or null                               | Demo-clock minutes since any of the resident's devices last moved.                    |
-| `last_motion_at`       | timestamp or null                             |                                                                                       |
-| `last_event`           | `{"type", "value", "ts"}` or null             | Newest non-heartbeat event from any of the resident's devices.                        |
-| `online`               | boolean                                       | True when any of the resident's devices is online.                                    |
-| `last_heartbeat_at`    | timestamp or null                             |                                                                                       |
-| `device_id`            | string or null                                | The device to open for details: the one with the alert, else the one that moved last. |
-| `device_status`        | status or null                                | That device's status.                                                                 |
-| `active_alert`         | Alert or null                                 | The resident's open alert, urgent ones first.                                         |
+| Field                       | Type                                          | Notes                                                                                 |
+| --------------------------- | --------------------------------------------- | ------------------------------------------------------------------------------------- |
+| `resident_id`               | string                                        |                                                                                       |
+| `first_name`                | string                                        |                                                                                       |
+| `last_name`                 | string                                        |                                                                                       |
+| `floor`                     | integer or null                               |                                                                                       |
+| `unit`                      | string or null                                | Apartment number, e.g. `"204"`.                                                       |
+| `state`                     | `fine`, `watch`, `worry`, `offline`, `urgent` | See below. The dashboard displays it and never recomputes it.                         |
+| `minutes_since_motion`      | integer or null                               | Demo-clock minutes since any of the resident's devices last moved.                    |
+| `last_motion_at`            | timestamp or null                             |                                                                                       |
+| `last_event`                | `{"type", "value", "ts"}` or null             | Newest non-heartbeat event from any of the resident's devices.                        |
+| `online`                    | boolean                                       | True when any of the resident's devices is online.                                    |
+| `last_heartbeat_at`         | timestamp or null                             |                                                                                       |
+| `device_id`                 | string or null                                | The device to open for details: the one with the alert, else the one that moved last. |
+| `device_status`             | status or null                                | That device's status.                                                                 |
+| `active_alert`              | Alert or null                                 | The resident's open alert, urgent ones first.                                         |
+| `activity_lower_than_usual` | boolean                                       | The resident's wellness trend flag (see Trend).                                       |
 
 **Unit `state`**, most severe first: `urgent` (an open `urgent` or `no_reply` alert), `offline`
 (no device online, so a dead battery never looks like safety), `worry` (no movement for
@@ -236,14 +275,23 @@ Both endpoints need a provider token: `401` without a login, `403` for family ca
 ### Contacts
 
 - `GET /api/contacts` → `[Contact]` (see `fixtures/contacts.json`)
-- `POST /api/contacts`, body `{"name": string, "phone": string}` → `201` with the new Contact.
-  Phone must be E.164 format (`+14045550123`), otherwise `422`.
+- `POST /api/contacts`, body `{"name": string, "phone": string, "resident_id": string
+(optional)}` → `201` with the new Contact. Phone must be E.164 format (`+14045550123`),
+  otherwise `422`. A family caregiver's contacts always follow their own resident.
 - `DELETE /api/contacts/{id}` → `204`, no body
 - `POST /api/contacts/{id}/test` → sends a test text. Response `{"ok": true, "channel": "sms" | "email"}`
 
-**Contact object:** `id` (int), `name`, `phone`, `created_at` (timestamp)
+**Contact object:** `id` (int), `name`, `phone`, `created_at` (timestamp), `resident_id`
+(string or null)
 
-All alerts go to every contact.
+**Who gets alerts.** A resident's family contacts (those with their `resident_id`, plus
+unassigned contacts, which get every alert as before accounts existed) receive the resident's
+alerts, unless the resident doesn't share alerts with family. In a community with an
+`on_call_phone`, urgent alerts (`urgent`, `no_reply`) text the on-call phone first, with family
+at the same time when `family_notify` is `"immediately"`. If staff don't acknowledge within
+`escalate_after_minutes` (real minutes), the alert escalates: first to family who were waiting
+(`"if_unanswered"`), otherwise to the on-call phone again, up to 3 times. Each escalation text
+starts with "StillHere: not yet acknowledged after N minutes".
 
 ### Demo controls
 
@@ -302,5 +350,3 @@ Wording lives in `backend/app/messages.py`. These are examples, not a fixed form
 - Add accounts and roles: `POST /api/auth/login`, `GET /api/auth/me`, optional bearer tokens
   on dashboard endpoints, `GET/PATCH /api/residents`, and `resident_id` on Device.
 - Add the community housing grid: `GET/PATCH /api/community`.
-- `POST /api/alerts/{id}/resolve` also records the check-in as a `motion` event.
-- Add the fall wording for `no_reply` and `false_alarm` alert messages.

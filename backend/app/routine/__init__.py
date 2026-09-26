@@ -2,6 +2,7 @@
 
 from .baseline import Baseline, Verdict, compute_baseline, evaluate, next_alert_time
 from .synthetic import generate_week
+from .trends import Trend, activity_trend, daily_counts
 
 __all__ = [
     "Baseline",
@@ -10,4 +11,7 @@ __all__ = [
     "evaluate",
     "next_alert_time",
     "generate_week",
+    "Trend",
+    "activity_trend",
+    "daily_counts",
 ]

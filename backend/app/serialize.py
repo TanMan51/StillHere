@@ -18,6 +18,9 @@ def alert_dict(a: Alert) -> dict:
         "sent_at": clock.iso(a.sent_at),
         "resolved_at": clock.iso(a.resolved_at),
         "resolved_by": a.resolved_by,
+        "acknowledged_at": clock.iso(a.acknowledged_at),
+        "acknowledged_by": a.acknowledged_by,
+        "escalation_level": a.escalation_level,
     }
 
 
@@ -26,7 +29,13 @@ def event_dict(e: Event) -> dict:
 
 
 def contact_dict(c: Contact) -> dict:
-    return {"id": c.id, "name": c.name, "phone": c.phone, "created_at": clock.iso(c.created_at)}
+    return {
+        "id": c.id,
+        "name": c.name,
+        "phone": c.phone,
+        "created_at": clock.iso(c.created_at),
+        "resident_id": c.resident_id,
+    }
 
 
 def user_dict(session: Session, u: User) -> dict:
@@ -55,6 +64,7 @@ def resident_dict(session: Session, r: Resident) -> dict:
         "unit": r.unit,
         "share_alerts_with_family": r.share_alerts_with_family,
         "share_activity_with_family": r.share_activity_with_family,
+        "family_notify": r.family_notify,
         "device_ids": list(device_ids),
     }
 

@@ -1,4 +1,5 @@
 import type {
+  Alert,
   Community,
   CommunityResponse,
   Contact,
@@ -8,7 +9,9 @@ import type {
   DevicesResponse,
   LoginResponse,
   MotionSensitivity,
+  FamilyNotify,
   Resident,
+  ResidentSummary,
   User,
 } from "./types";
 import { LOGOUT_EVENT, loadSession, saveSession } from "./session";
@@ -63,11 +66,18 @@ export const api = {
   me: () => request<{ user: User }>("/auth/me"),
   residents: () => request<Resident[]>("/residents"),
   community: () => request<CommunityResponse>("/community"),
-  updateCommunity: (body: { watch_after_minutes?: number; worry_after_minutes?: number }) =>
+  updateCommunity: (body: Partial<Omit<Community, "id" | "name">>) =>
     request<Community>("/community", "PATCH", body),
+  residentSummary: (id: string) =>
+    request<ResidentSummary>(`/residents/${encodeURIComponent(id)}/summary`),
+  acknowledge: (id: number) => request<Alert>(`/alerts/${id}/acknowledge`, "POST"),
   updateResident: (
     id: string,
-    body: { share_alerts_with_family?: boolean; share_activity_with_family?: boolean },
+    body: {
+      share_alerts_with_family?: boolean;
+      share_activity_with_family?: boolean;
+      family_notify?: FamilyNotify;
+    },
   ) => request<Resident>(`/residents/${encodeURIComponent(id)}`, "PATCH", body),
   devices: () => request<DevicesResponse>("/devices"),
   device: (id: string) => request<DetailResponse>(`/devices/${encodeURIComponent(id)}`),

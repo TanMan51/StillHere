@@ -8,6 +8,7 @@
     "unit": "101",
     "share_alerts_with_family": true,
     "share_activity_with_family": true,
+    "family_notify": "immediately",
     "device_ids": ["sim-101"]
   },
   {
@@ -19,6 +20,7 @@
     "unit": "204",
     "share_alerts_with_family": true,
     "share_activity_with_family": true,
+    "family_notify": "immediately",
     "device_ids": ["door-1", "fridge-1", "walker-1"]
   }
 ]

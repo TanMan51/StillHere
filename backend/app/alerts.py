@@ -12,8 +12,8 @@ import logging
 
 from sqlmodel import Session, col, select
 
-from . import clock, config, messages, notify, routine
-from .models import Alert, Contact, Device, Event
+from . import clock, config, messages, routine, routing
+from .models import Alert, Device, Event
 from .serialize import device_baseline, is_online
 
 log = logging.getLogger("stillhere.alerts")
@@ -30,39 +30,13 @@ def set_status(device: Device, status: str) -> None:
         device.status_since = clock.now()
 
 
-def send_to_contacts(session: Session, body: str) -> bool:
-    """Text every contact, falling back to email when no text got through.
-
-    One failed number never stops the others. True if anything was delivered.
-    """
-    sent = False
-    if notify.sms_configured() or not notify.email_configured():
-        for contact in session.exec(select(Contact)).all():
-            try:
-                notify.send_sms(contact.phone, body)
-                sent = True
-            except notify.SmsError as e:
-                log.error("text to contact %s failed: %s", contact.id, e)
-    if not sent and notify.email_configured():
-        try:
-            notify.send_email(messages.email_subject(body), body)
-            sent = True
-        except notify.EmailError as e:
-            log.error("email fallback failed: %s", e)
-    return sent
-
-
 def raise_alert(
     session: Session, device: Device, kind: str, message: str, *, sms: bool = True
 ) -> Alert:
     now = clock.now()
-    alert = Alert(
-        device_id=device.id,
-        kind=kind,
-        message=message,
-        sms_sent=send_to_contacts(session, message) if sms else False,
-        sent_at=now,
-    )
+    alert = Alert(device_id=device.id, kind=kind, message=message, sent_at=now)
+    # Who hears first (family, or on-call staff for urgent alerts in a community) is routing's call.
+    alert.sms_sent = routing.notify_new(session, device, alert) if sms else False
     session.add(alert)
     log.info("%s: %s alert (sms_sent=%s): %s", device.id, kind, alert.sms_sent, message)
     return alert

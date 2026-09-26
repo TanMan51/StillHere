@@ -9,7 +9,10 @@ export interface Alert {
   sms_sent: boolean;
   sent_at: string;
   resolved_at: string | null;
-  resolved_by: "motion" | "reply" | "family" | "heartbeat" | null;
+  resolved_by: "motion" | "reply" | "family" | "staff" | "heartbeat" | null;
+  acknowledged_at: string | null;
+  acknowledged_by: string | null;
+  escalation_level: number;
 }
 export interface Device {
   id: string;
@@ -53,6 +56,7 @@ export interface Contact {
   name: string;
   phone: string;
   created_at: string;
+  resident_id: string | null;
 }
 export interface Demo {
   enabled: boolean;
@@ -91,14 +95,19 @@ export interface Resident {
   unit: string | null;
   share_alerts_with_family: boolean;
   share_activity_with_family: boolean;
+  family_notify: FamilyNotify;
   device_ids: string[];
 }
+export type FamilyNotify = "immediately" | "if_unanswered";
 export type UnitState = "fine" | "watch" | "worry" | "offline" | "urgent";
 export interface Community {
   id: string;
   name: string;
   watch_after_minutes: number;
   worry_after_minutes: number;
+  on_call_phone: string | null;
+  escalate_after_minutes: number;
+  checkin_time: string;
 }
 export interface Unit {
   resident_id: string;
@@ -115,9 +124,42 @@ export interface Unit {
   device_id: string | null;
   device_status: Status | null;
   active_alert: Alert | null;
+  activity_lower_than_usual: boolean;
+}
+export interface ResponseTimes {
+  alerts: number;
+  acknowledged: number;
+  average_acknowledge_seconds: number | null;
+  average_resolve_seconds: number | null;
 }
 export interface CommunityResponse {
   server_now: string;
   community: Community;
   units: Unit[];
+  checkin: { time: string; since: string; resident_ids: string[] };
+  response_times: ResponseTimes;
+}
+export interface Trend {
+  days: { date: string; count: number }[];
+  recent_daily_average: number | null;
+  prior_daily_average: number | null;
+  lower_than_usual: boolean;
+  note: string | null;
+}
+export interface ResidentSummary {
+  server_now: string;
+  resident: Resident;
+  community_name: string | null;
+  timezone: string;
+  unit: Unit | null;
+  devices: {
+    id: string;
+    name: string;
+    object_type: Device["object_type"];
+    status: Status;
+    online: boolean;
+  }[];
+  trend: Trend | null;
+  alerts: Alert[];
+  response_times: ResponseTimes;
 }

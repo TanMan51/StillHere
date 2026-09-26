@@ -29,7 +29,8 @@ import PlacementGuide, { DeviceSetup, SetupPrompt } from "./PlacementGuide";
 import { LOGOUT_EVENT, loadSession, saveSession, type Session } from "./session";
 import LandingPage from "./LandingPage";
 import ModelSwarm from "./ModelSwarm";
-import CommunityPage from "./Community";
+import CommunityPage, { ResidentTable } from "./Community";
+import ResidentPage, { VisitSummary } from "./Resident";
 import { useReveal, useSmoothScroll } from "./motion";
 
 const labels: Record<Status, string> = {
@@ -122,11 +123,13 @@ function Action({
   run,
   onDone,
   secondary = false,
+  doneText = "Done",
 }: {
   children: ReactNode;
   run: () => Promise<unknown>;
   onDone?: () => void;
   secondary?: boolean;
+  doneText?: string;
 }) {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
@@ -140,7 +143,7 @@ function Action({
           setMessage("");
           try {
             await run();
-            setMessage("Done");
+            setMessage(doneText);
             onDone?.();
           } catch (e) {
             setMessage(e instanceof Error ? e.message : "Could not save");
@@ -448,12 +451,70 @@ const sensitivities: { value: MotionSensitivity; label: string }[] = [
   { value: "medium", label: "Medium: everyday use, like opening a door" },
   { value: "high", label: "High: the lightest touch" },
 ];
+// The sensor fetches its settings with every heartbeat (contract: POST /api/events), and
+// heartbeats are at most this many seconds apart.
+const SENSOR_SYNC_SECONDS = 30;
+function newer(ts: string | null, than: string) {
+  return ts !== null && Date.parse(ts) > Date.parse(than);
+}
+/** A progress bar from saving until the sensor has had its chance to fetch the new settings. */
+function SensorSync({
+  device,
+  savedAt,
+  startedAt,
+}: {
+  device: Device;
+  savedAt: string;
+  startedAt: number;
+}) {
+  const [now, setNow] = useState(Date.now());
+  // Any post from the sensor after the save carried the new settings back to it.
+  const heard = newer(device.last_heartbeat_at, savedAt) || newer(device.last_motion_at, savedAt);
+  const seconds = (now - startedAt) / 1000;
+  const done = heard || seconds >= SENSOR_SYNC_SECONDS;
+  useEffect(() => {
+    if (done) return;
+    const timer = setInterval(() => setNow(Date.now()), 200);
+    return () => clearInterval(timer);
+  }, [done]);
+  const progress = done ? 1 : seconds / SENSOR_SYNC_SECONDS;
+  const ready = heard || device.online;
+  const message = heard
+    ? "Sensor updated. It’s ready to use."
+    : device.online
+      ? "Ready to use. The sensor picks up new settings every 30 seconds."
+      : "Saved. The sensor is offline and will pick up these settings when it reconnects.";
+  return (
+    <div className="sensor-sync">
+      <div
+        className="sync-bar"
+        role="progressbar"
+        aria-label="Sending settings to the sensor"
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={Math.round(progress * 100)}
+      >
+        <span
+          className={done ? (ready ? "ready" : "waiting") : ""}
+          style={{ width: `${progress * 100}%` }}
+        />
+      </div>
+      {!done && (
+        <small aria-hidden="true">
+          Sending settings to the sensor… about {Math.ceil(SENSOR_SYNC_SECONDS - seconds)} s left
+        </small>
+      )}
+      <small aria-live="polite">{done ? message : ""}</small>
+    </div>
+  );
+}
 function Settings({ device, onDone }: { device: Device; onDone: () => void }) {
   const [name, setName] = useState(device.name);
   const [hours, setHours] = useState(String(Math.floor(device.limit_minutes / 60)));
   const [minutes, setMinutes] = useState(String(device.limit_minutes % 60));
   const [soundEnabled, setSoundEnabled] = useState(device.sound_enabled);
   const [sensitivity, setSensitivity] = useState(device.motion_sensitivity);
+  const [sync, setSync] = useState<{ savedAt: string; startedAt: number } | null>(null);
   const limit = Number(hours || 0) * 60 + Number(minutes || 0);
   return (
     <section className="panel">
@@ -527,17 +588,26 @@ function Settings({ device, onDone }: { device: Device; onDone: () => void }) {
             return Promise.reject(
               new Error("Choose a check-in time between 1 minute and 48 hours"),
             );
-          return api.updateDevice(device.id, {
-            name: name.trim(),
-            limit_minutes: limit,
-            sound_enabled: soundEnabled,
-            motion_sensitivity: sensitivity,
-          });
+          // Name and check-in time live on the server; only these travel to the sensor.
+          const reachesSensor =
+            soundEnabled !== device.sound_enabled || sensitivity !== device.motion_sensitivity;
+          return api
+            .updateDevice(device.id, {
+              name: name.trim(),
+              limit_minutes: limit,
+              sound_enabled: soundEnabled,
+              motion_sensitivity: sensitivity,
+            })
+            .then((saved) =>
+              setSync(reachesSensor ? { savedAt: saved.server_now, startedAt: Date.now() } : null),
+            );
         }}
         onDone={onDone}
+        doneText="Saved"
       >
         Save settings
       </Action>
+      {sync && <SensorSync key={sync.startedAt} device={device} {...sync} />}
     </section>
   );
 }
@@ -848,12 +918,19 @@ export default function App() {
         </div>
       )}
       <main
-        className={location.pathname === "/dashboard" ? "overview-layout" : "application-layout"}
+        className={
+          location.pathname === "/dashboard" && user.role === "family"
+            ? "overview-layout"
+            : "application-layout"
+        }
       >
         {/* Keyed so each page plays the enter transition. */}
         <div className="route-view" key={location.pathname}>
           <Routes>
-            <Route path="/dashboard" element={<Overview />} />
+            <Route
+              path="/dashboard"
+              element={user.role === "provider" ? <ResidentTable /> : <Overview />}
+            />
             <Route
               path="/community"
               element={
@@ -861,6 +938,8 @@ export default function App() {
               }
             />
             <Route path="/devices/:id" element={<DevicePage />} />
+            <Route path="/residents/:id" element={<ResidentPage />} />
+            <Route path="/residents/:id/summary" element={<VisitSummary />} />
             <Route path="/contacts" element={<Contacts />} />
             <Route path="/setup" element={<Setup />} />
             <Route path="/setup-device" element={<DeviceSetup />} />

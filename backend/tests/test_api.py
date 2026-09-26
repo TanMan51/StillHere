@@ -647,3 +647,138 @@ def test_demo_clock_moves_grid_colors(client):
 
     time.sleep(0.5)  # half a real second is 12 demo hours at this speed
     assert _grid(client)["101"]["state"] == "worry"
+
+
+# --- Staff alert handling, routing, escalation ---
+
+
+def _texts(monkeypatch):
+    """Capture every text instead of sending it."""
+    from app import notify
+
+    sent = []
+    monkeypatch.setattr(notify, "send_sms", lambda to, body: sent.append((to, body)) or "sms")
+    return sent
+
+
+def _set_community(client, **settings):
+    res = client.patch("/api/community", json=settings, headers=_login(client, PROVIDER))
+    assert res.status_code == 200, res.text
+
+
+@pytest.fixture()
+def on_call(client):
+    _set_community(client, on_call_phone="+15550100000", escalate_after_minutes=10)
+    client.post("/api/contacts", json={"name": "Sam", "phone": "+14045550123"})
+    yield "+15550100000"
+    _set_community(client, on_call_phone="", escalate_after_minutes=10)
+    client.patch("/api/residents/mg-204", json={"family_notify": "immediately"})
+
+
+def test_urgent_alert_pages_on_call_staff_first_then_family(client, monkeypatch, on_call):
+    sent = _texts(monkeypatch)
+    _event(client, {"type": "reply", "value": "help"})
+    assert [to for to, _ in sent] == [on_call, "+14045550123"]
+
+
+def test_family_waits_for_staff_when_resident_prefers(client, monkeypatch, on_call):
+    from app import checker
+
+    client.patch("/api/residents/mg-204", json={"family_notify": "if_unanswered"})
+    sent = _texts(monkeypatch)
+    _event(client, {"type": "reply", "value": "help"})
+    assert [to for to, _ in sent] == [on_call]
+    # Nobody acknowledges within the window: it escalates to the family.
+    monkeypatch.setattr(clock, "real_now", lambda: datetime_now_plus(minutes=11))
+    checker.check_all()
+    assert sent[-1][0] == "+14045550123"
+    assert sent[-1][1].startswith("StillHere: not yet acknowledged after 10 minutes.")
+    alert = _fridge(client)["active_alert"]
+    assert alert["escalation_level"] == 1
+
+
+def datetime_now_plus(**delta):
+    from datetime import datetime, timedelta, timezone
+
+    return datetime.now(timezone.utc) + timedelta(**delta)
+
+
+def test_acknowledged_alert_does_not_escalate(client, monkeypatch, on_call):
+    from app import checker
+
+    sent = _texts(monkeypatch)
+    _event(client, {"type": "reply", "value": "help"})
+    alert_id = _fridge(client)["active_alert"]["id"]
+    staff = _login(client, PROVIDER)
+    ack = client.post(f"/api/alerts/{alert_id}/acknowledge", headers=staff).json()
+    assert ack["acknowledged_by"] == "Maple Grove wellness staff" and ack["acknowledged_at"]
+    before = len(sent)
+    monkeypatch.setattr(clock, "real_now", lambda: datetime_now_plus(minutes=30))
+    checker.check_all()
+    assert len(sent) == before
+    assert client.post(f"/api/alerts/{alert_id}/resolve", headers=staff).json() == {"ok": True}
+    resolved = _fridge(client)["alerts"][0]
+    assert resolved["resolved_by"] == "staff" and _fridge(client)["status"] == "ok"
+
+
+def test_only_staff_can_acknowledge(client):
+    _event(client, {"type": "reply", "value": "help"})
+    alert_id = _fridge(client)["active_alert"]["id"]
+    family = _login(client, FAMILY)
+    assert client.post(f"/api/alerts/{alert_id}/acknowledge", headers=family).status_code == 403
+
+
+def test_community_settings_validate(client):
+    staff = _login(client, PROVIDER)
+    for bad in ({"on_call_phone": "555"}, {"checkin_time": "25:00"}, {"escalate_after_minutes": 0}):
+        assert client.patch("/api/community", json=bad, headers=staff).status_code == 422
+
+
+# --- Morning check-in, wellness trends, visit summary ---
+
+
+def test_checkin_since_is_latest_local_checkin_time():
+    from datetime import datetime, timezone
+
+    from app.community import checkin_since
+
+    after = datetime(2026, 9, 26, 15, 0, tzinfo=timezone.utc)  # 11:00 in New York
+    before = datetime(2026, 9, 26, 12, 0, tzinfo=timezone.utc)  # 08:00 in New York
+    assert checkin_since("10:00", after, "America/New_York").isoformat().startswith("2026-09-26T14")
+    assert (
+        checkin_since("10:00", before, "America/New_York").isoformat().startswith("2026-09-25T14")
+    )
+
+
+def test_checkin_list_is_quiet_residents_longest_first(client):
+    body = client.get("/api/community", headers=_login(client, PROVIDER)).json()
+    by_id = {u["resident_id"]: u for u in body["units"]}
+    listed = body["checkin"]["resident_ids"]
+    minutes = [by_id[r]["minutes_since_motion"] for r in listed if by_id[r]["minutes_since_motion"]]
+    assert minutes == sorted(minutes, reverse=True)
+    assert "mg-101" not in listed  # moved minutes ago
+
+
+def test_trend_flags_quieter_residents_and_community_response_times(client):
+    body = client.get("/api/community", headers=_login(client, PROVIDER)).json()
+    lower = {u["unit"] for u in body["units"] if u["activity_lower_than_usual"]}
+    assert lower == {"102", "303"}
+    stats = body["response_times"]
+    assert stats["acknowledged"] >= 4 and stats["average_acknowledge_seconds"] > 0
+
+
+def test_resident_summary_for_visit(client):
+    staff = _login(client, PROVIDER)
+    summary = client.get("/api/residents/mg-104/summary", headers=staff).json()
+    assert set(summary) == set(fixture("resident_summary.json"))
+    assert len(summary["trend"]["days"]) == 30
+    assert summary["alerts"][0]["acknowledged_by"] == "Maple Grove wellness staff"
+    assert summary["response_times"]["average_acknowledge_seconds"] == 180
+    family = _login(client, FAMILY)
+    assert client.get("/api/residents/mg-104/summary", headers=family).status_code == 404
+    client.patch("/api/residents/mg-204", json={"share_activity_with_family": False})
+    try:
+        mine = client.get("/api/residents/mg-204/summary", headers=family).json()
+        assert mine["trend"] is None
+    finally:
+        client.patch("/api/residents/mg-204", json={"share_activity_with_family": True})
