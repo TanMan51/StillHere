@@ -1,11 +1,4 @@
-import {
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-  type FormEvent,
-  type ReactNode,
-} from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import {
   Link,
   Navigate,
@@ -16,20 +9,12 @@ import {
   useNavigate,
   useParams,
 } from "react-router-dom";
-import {
-  Bar,
-  BarChart,
-  Cell,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
+import { Bar, BarChart, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { QRCodeSVG } from "qrcode.react";
 import { api, useMock } from "./api";
 import { usePoll, useTick } from "./hooks";
 import type { Device, Status } from "./types";
-import PlacementGuide, { PlacementHelp } from "./PlacementGuide";
+import PlacementGuide, { PlacementHelp, SetupPrompt } from "./PlacementGuide";
 import { hasDemoSession, saveDemoSession } from "./Login";
 import LandingPage from "./LandingPage";
 
@@ -52,10 +37,7 @@ const date = (value: string, timezone?: string) =>
   });
 function ago(value: string | null, server: string) {
   if (!value) return "No activity recorded";
-  const minutes = Math.max(
-    0,
-    Math.floor((Date.parse(server) - Date.parse(value)) / 60000),
-  );
+  const minutes = Math.max(0, Math.floor((Date.parse(server) - Date.parse(value)) / 60000));
   return minutes < 1
     ? "Just now"
     : minutes < 60
@@ -69,13 +51,7 @@ function Badge({ status }: { status: Status }) {
     </span>
   );
 }
-function Countdown({
-  device,
-  receivedAt,
-}: {
-  device: Device;
-  receivedAt: number;
-}) {
+function Countdown({ device, receivedAt }: { device: Device; receivedAt: number }) {
   const now = useTick();
   if (device.seconds_until_alert === null)
     return (
@@ -89,8 +65,7 @@ function Countdown({
     );
   const seconds = Math.max(
     0,
-    device.seconds_until_alert -
-      Math.floor(Math.max(0, now - receivedAt) / 1000),
+    device.seconds_until_alert - Math.floor(Math.max(0, now - receivedAt) / 1000),
   );
   return (
     <span>
@@ -170,17 +145,11 @@ function Overview() {
   const [notice, setNotice] = useState("");
   useEffect(() => {
     if (!data) return;
-    const alerts = data.devices.flatMap((d) =>
-      d.active_alert ? [d.active_alert] : [],
-    );
+    const alerts = data.devices.flatMap((d) => (d.active_alert ? [d.active_alert] : []));
     const fresh = alerts.find((a) => seen.current && !seen.current.has(a.id));
     if (fresh) setNotice(fresh.message);
-    seen.current = new Set([
-      ...(seen.current ?? []),
-      ...alerts.map((a) => a.id),
-    ]);
+    seen.current = new Set([...(seen.current ?? []), ...alerts.map((a) => a.id)]);
   }, [data]);
-  const attention = data?.devices.filter((d) => d.status !== "ok").length ?? 0;
   return (
     <>
       <section className="overview-hero">
@@ -189,8 +158,8 @@ function Overview() {
             <i /> Updates every 2 seconds
           </span>
         </Heading>
-        <a className="hero-scroll" href="#device-status">
-          View device status <span aria-hidden="true">↓</span>
+        <a className="hero-scroll" href="#devices">
+          View your devices <span aria-hidden="true">↓</span>
         </a>
       </section>
       <Feedback error={error} />
@@ -202,31 +171,10 @@ function Overview() {
           </button>
         </div>
       )}
-      <section className="summary" id="device-status">
-        <div>
-          <p className="eyebrow">DEVICE STATUS</p>
-          <h2>
-            {!data
-              ? "Loading device status…"
-              : attention
-                ? `${attention} devices need attention.`
-                : "No active device alerts."}
-          </h2>
-          <p>View device activity, connection status, and alerts.</p>
-        </div>
-        <div className="summary-stat">
-          <strong>
-            {data?.devices.filter((d) => d.online).length ?? "—"}
-            <span> / {data?.devices.length ?? "—"}</span>
-          </strong>
-          <p>sensors connected</p>
-        </div>
-      </section>
-      <div className="section-heading">
+      <div className="section-heading" id="devices">
         <h2>Devices</h2>
         <span>{data?.devices.length ?? 0} devices</span>
       </div>
-      <PlacementHelp />
       <div className="cards">
         {data?.devices.map((d) => (
           <Link to={`/devices/${d.id}`} className="device-card" key={d.id}>
@@ -252,14 +200,12 @@ function Overview() {
           </Link>
         ))}
       </div>
-      {data && !data.devices.length && (
-        <div className="panel">No sensors are configured yet.</div>
-      )}
+      {data && !data.devices.length && <div className="panel">No sensors are configured yet.</div>}
+      <SetupPrompt />
       <div className="footnote">
         <p>
           <small>
-            Activity is a signal to check in, not a confirmation of someone’s
-            wellbeing.
+            Activity is a signal to check in, not a confirmation of someone’s wellbeing.
           </small>
         </p>
       </div>
@@ -331,11 +277,7 @@ function DevicePage() {
                   count,
                 }))}
               >
-                <XAxis
-                  dataKey="hour"
-                  tickFormatter={(h) => `${h}:00`}
-                  interval={5}
-                />
+                <XAxis dataKey="hour" tickFormatter={(h) => `${h}:00`} interval={5} />
                 <YAxis allowDecimals={false} width={28} />
                 <Tooltip
                   labelFormatter={(h) => `${h}:00`}
@@ -360,10 +302,7 @@ function DevicePage() {
               </BarChart>
             </ResponsiveContainer>
           </div>
-          <small>
-            Hours shown in {d.baseline.timezone}. Dark blue marks the current
-            hour.
-          </small>
+          <small>Hours shown in {d.baseline.timezone}. Dark blue marks the current hour.</small>
         </section>
         <Settings key={d.id} device={d} onDone={refresh} />
       </div>
@@ -395,8 +334,7 @@ function DevicePage() {
               <strong>{a.kind.replaceAll("_", " ")}</strong>
               <p>{a.message}</p>
               <small>
-                {date(a.sent_at, d.baseline.timezone)} ·{" "}
-                {a.resolved_at ? "Resolved" : "Open"} ·{" "}
+                {date(a.sent_at, d.baseline.timezone)} · {a.resolved_at ? "Resolved" : "Open"} ·{" "}
                 {a.sms_sent ? "Text sent" : "No text sent"}
               </small>
             </article>
@@ -414,21 +352,12 @@ function Settings({ device, onDone }: { device: Device; onDone: () => void }) {
       <h2>Device settings</h2>
       <label>
         Device name
-        <input
-          value={name}
-          maxLength={100}
-          onChange={(e) => setName(e.target.value)}
-        />
+        <input value={name} maxLength={100} onChange={(e) => setName(e.target.value)} />
       </label>
       <label>
         Check in after no activity for
-        <select
-          value={limit}
-          onChange={(e) => setLimit(Number(e.target.value))}
-        >
-          {![360, 720, 1440].includes(limit) && (
-            <option value={limit}>{limit} minutes</option>
-          )}
+        <select value={limit} onChange={(e) => setLimit(Number(e.target.value))}>
+          {![360, 720, 1440].includes(limit) && <option value={limit}>{limit} minutes</option>}
           <option value={360}>6 hours</option>
           <option value={720}>12 hours</option>
           <option value={1440}>24 hours</option>
@@ -437,8 +366,7 @@ function Settings({ device, onDone }: { device: Device; onDone: () => void }) {
       <p className="muted">A learned routine may suggest a check-in sooner.</p>
       <Action
         run={() => {
-          if (!name.trim())
-            return Promise.reject(new Error("Enter a device name"));
+          if (!name.trim()) return Promise.reject(new Error("Enter a device name"));
           return api.updateDevice(device.id, {
             name: name.trim(),
             limit_minutes: limit,
@@ -502,11 +430,7 @@ function Contacts() {
                 >
                   Test text
                 </Action>
-                <Action
-                  secondary
-                  run={() => api.deleteContact(c.id)}
-                  onDone={refresh}
-                >
+                <Action secondary run={() => api.deleteContact(c.id)} onDone={refresh}>
                   Remove
                 </Action>
               </div>
@@ -537,9 +461,7 @@ function Contacts() {
             />
           </label>
           <p className="muted">Include + and the country code.</p>
-          <button disabled={busy || !name.trim()}>
-            {busy ? "Adding…" : "Add contact"}
-          </button>
+          <button disabled={busy || !name.trim()}>{busy ? "Adding…" : "Add contact"}</button>
           <p role="status">{message}</p>
         </form>
       </div>
@@ -563,26 +485,14 @@ function Setup() {
         <p>Use the deployed dashboard address so another phone can reach it.</p>
         <label>
           Dashboard URL
-          <input
-            type="url"
-            value={url}
-            onChange={(e) => setUrl(e.target.value)}
-          />
+          <input type="url" value={url} onChange={(e) => setUrl(e.target.value)} />
         </label>
         {valid ? (
-          <QRCodeSVG
-            value={url}
-            size={200}
-            marginSize={4}
-            title="Scan to open StillHere"
-          />
+          <QRCodeSVG value={url} size={200} marginSize={4} title="Scan to open StillHere" />
         ) : (
           <p role="alert">Enter a complete http or https address.</p>
         )}
-        <p>
-          Scan with a phone camera, then choose “Add to Home Screen” in the
-          browser menu.
-        </p>
+        <p>Scan with a phone camera, then choose “Add to Home Screen” in the browser menu.</p>
         <small>A localhost address only works on this computer.</small>
       </section>
     </>
@@ -606,17 +516,10 @@ function DemoPage() {
             ? "Mock controls change local fixtures only. They do not run the backend alert engine or send texts."
             : "These controls change the connected backend demo."}
         </p>
-        <p>
-          Server clock: {demo.data ? date(demo.data.server_now) : "Loading…"}
-        </p>
+        <p>Server clock: {demo.data ? date(demo.data.server_now) : "Loading…"}</p>
         {demo.data && (
-          <Action
-            run={() => api.setDemo({ enabled: !demo.data!.enabled })}
-            onDone={demo.refresh}
-          >
-            {demo.data.enabled
-              ? "Disable fast clock"
-              : "Enable fast clock (1440×)"}
+          <Action run={() => api.setDemo({ enabled: !demo.data!.enabled })} onDone={demo.refresh}>
+            {demo.data.enabled ? "Disable fast clock" : "Enable fast clock (1440×)"}
           </Action>
         )}
         <label>
@@ -641,16 +544,11 @@ function DemoPage() {
         <p role="status">{seedMessage}</p>
         <label>
           Jump to a time (this browser’s timezone)
-          <input
-            type="datetime-local"
-            value={clock}
-            onChange={(e) => setClock(e.target.value)}
-          />
+          <input type="datetime-local" value={clock} onChange={(e) => setClock(e.target.value)} />
         </label>
         <Action
           run={() => {
-            if (!clock)
-              return Promise.reject(new Error("Choose a date and time"));
+            if (!clock) return Promise.reject(new Error("Choose a date and time"));
             return api.setDemo({
               enabled: true,
               start_clock_at: new Date(clock).toISOString(),
@@ -661,10 +559,7 @@ function DemoPage() {
           Jump and start fast clock
         </Action>
         <hr />
-        <p>
-          Reset removes all event and alert history, keeping devices and
-          contacts.
-        </p>
+        <p>Reset removes all event and alert history, keeping devices and contacts.</p>
         {confirmReset ? (
           <div className="button-row">
             <Action
@@ -676,10 +571,7 @@ function DemoPage() {
             >
               Confirm reset history
             </Action>
-            <button
-              className="secondary"
-              onClick={() => setConfirmReset(false)}
-            >
+            <button className="secondary" onClick={() => setConfirmReset(false)}>
               Cancel
             </button>
           </div>
@@ -706,9 +598,7 @@ export default function App() {
       <Navigate
         to="/login"
         replace
-        state={
-          loggingOut ? null : { from: location.pathname + location.search }
-        }
+        state={loggingOut ? null : { from: location.pathname + location.search }}
       />
     );
   }
@@ -735,10 +625,7 @@ export default function App() {
     navigate("/login", { replace: true, state: null });
     window.scrollTo(0, 0);
   }
-  if (isLanding)
-    return (
-      <LandingPage key={location.key} onLogin={login} loggedIn={loggedIn} />
-    );
+  if (isLanding) return <LandingPage key={location.key} onLogin={login} loggedIn={loggedIn} />;
   return (
     <>
       <header className="topbar">
@@ -763,16 +650,11 @@ export default function App() {
       </header>
       {useMock && (
         <div className="mock-banner">
-          Preview mode · sample household · changes reset on reload · no texts
-          sent
+          Preview mode · sample household · changes reset on reload · no texts sent
         </div>
       )}
       <main
-        className={
-          location.pathname === "/dashboard"
-            ? "overview-layout"
-            : "application-layout"
-        }
+        className={location.pathname === "/dashboard" ? "overview-layout" : "application-layout"}
       >
         <Routes>
           <Route path="/dashboard" element={<Overview />} />

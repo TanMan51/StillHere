@@ -18,32 +18,20 @@ try {
   await page.locator(".scene-ready").waitFor();
   assert.doesNotMatch(await page.locator("body").innerText(), /hackgt/i);
   assert.ok(
-    await page
-      .locator(".ice-scene canvas")
-      .evaluate((canvas) => canvas.width >= innerWidth),
+    await page.locator(".ice-scene canvas").evaluate((canvas) => canvas.width >= innerWidth),
   );
   assert.equal(await page.getByRole("dialog").count(), 0);
   assert.equal(await page.locator(".device-card").count(), 0);
-  await page
-    .locator(".landing-header")
-    .getByRole("link", { name: "About us" })
-    .click();
-  await page
-    .getByRole("heading", { name: "About StillHere", exact: true })
-    .waitFor();
+  await page.locator(".landing-header").getByRole("link", { name: "About us" }).click();
+  await page.getByRole("heading", { name: "About StillHere", exact: true }).waitFor();
   assert.ok(page.url().endsWith("#about"));
-  await page
-    .locator(".landing-header")
-    .getByRole("button", { name: "Log in" })
-    .click();
+  await page.locator(".landing-header").getByRole("button", { name: "Log in" }).click();
   await page.getByRole("dialog").waitFor();
   await page.keyboard.press("Escape");
   await page.getByRole("dialog").waitFor({ state: "hidden" });
   await page.goto("http://localhost:5173/");
   await page.locator(".scene-ready").waitFor();
-  await page
-    .getByRole("button", { name: "Motion: off", exact: true })
-    .waitFor();
+  await page.getByRole("button", { name: "Motion: off", exact: true }).waitFor();
   await page.screenshot({
     path: "screenshots/scene-login-desktop.png",
     fullPage: true,
@@ -56,36 +44,26 @@ try {
     "true",
   );
   await page.getByRole("button", { name: "Motion: on", exact: true }).click();
-  await page
-    .locator(".landing-header")
-    .getByRole("button", { name: "Log in" })
-    .click();
+  await page.locator(".landing-header").getByRole("button", { name: "Log in" }).click();
   await page.getByLabel("Email address").fill("demo@stillhere.example");
   await page.getByLabel("Password", { exact: true }).fill("stillhere-demo");
-  await page
-    .getByRole("dialog")
-    .getByRole("button", { name: "Log in", exact: true })
-    .click();
-  await page
-    .getByRole("heading", { name: "Mom's fridge", exact: true })
-    .waitFor();
+  await page.getByRole("dialog").getByRole("button", { name: "Log in", exact: true }).click();
+  await page.getByRole("heading", { name: "Mom's fridge", exact: true }).waitFor();
   await page.screenshot({
     path: "screenshots/scene-overview-desktop.png",
     fullPage: true,
   });
-  await page.getByRole("link", { name: "View device status" }).click();
-  assert.ok(page.url().endsWith("#device-status"));
+  await page.getByRole("link", { name: "View your devices" }).click();
+  assert.ok(page.url().endsWith("#devices"));
+  await page.getByRole("button", { name: "Set up your device" }).click();
+  await page.getByRole("button", { name: "Help me choose a spot" }).click();
+  assert.ok(page.url().endsWith("/placement"));
+  await page.goBack();
   await page.goto("http://localhost:5173/");
-  await page
-    .locator(".landing-header")
-    .getByRole("button", { name: "Log in" })
-    .click();
+  await page.locator(".landing-header").getByRole("button", { name: "Log in" }).click();
   await page.getByRole("dialog").waitFor();
   assert.equal(
-    await page
-      .locator(".landing-header")
-      .getByRole("link", { name: "Dashboard" })
-      .count(),
+    await page.locator(".landing-header").getByRole("link", { name: "Dashboard" }).count(),
     0,
   );
   await page.keyboard.press("Escape");
@@ -93,17 +71,13 @@ try {
   for (const width of [390, 768]) {
     await page.setViewportSize({ width, height: 844 });
     assert.ok(
-      await page.evaluate(
-        () => document.documentElement.scrollWidth <= innerWidth,
-      ),
+      await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),
       `No horizontal overflow at ${width}px`,
     );
   }
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("http://localhost:5173/dashboard");
-  await page
-    .getByRole("heading", { name: "Mom's fridge", exact: true })
-    .waitFor();
+  await page.getByRole("heading", { name: "Mom's fridge", exact: true }).waitFor();
   await page.screenshot({
     path: "screenshots/scene-overview-mobile.png",
     fullPage: true,
@@ -117,18 +91,12 @@ try {
   await page
     .locator(".ice-scene canvas")
     .evaluate((canvas) =>
-      canvas
-        .getContext("webgl")
-        .getExtension("WEBGL_lose_context")
-        .loseContext(),
+      canvas.getContext("webgl").getExtension("WEBGL_lose_context").loseContext(),
     );
   await page.locator(".ice-scene:not(.scene-ready)").waitFor();
   assert.equal(await page.locator(".scene-fallback").isVisible(), true);
   assert.equal(
-    await page
-      .locator(".landing-header")
-      .getByRole("button", { name: "Log in" })
-      .isEnabled(),
+    await page.locator(".landing-header").getByRole("button", { name: "Log in" }).isEnabled(),
     true,
   );
   assert.deepEqual(errors, []);

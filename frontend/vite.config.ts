@@ -3,10 +3,9 @@ import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 export default defineConfig(({ mode }) => ({
   plugins: [react(), tailwindcss()],
-  define:
-    mode === "live"
-      ? { "import.meta.env.VITE_USE_MOCK": '"false"' }
-      : undefined,
+  // Tailwind runs as a Vite plugin, so skip the PostCSS config search entirely.
+  css: { postcss: {} },
+  define: mode === "live" ? { "import.meta.env.VITE_USE_MOCK": '"false"' } : undefined,
   server: {
     proxy: {
       "/api": {

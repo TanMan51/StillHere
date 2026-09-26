@@ -428,17 +428,22 @@ main {
 }
 .cards {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 22px;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 440px), 1fr));
+  gap: 28px;
 }
 .device-card {
-  padding: 30px 30px 0;
+  padding: 40px 40px 8px;
+  min-height: 380px;
   display: flex;
   flex-direction: column;
   transition:
     background 0.2s,
     transform 0.2s;
   min-width: 0;
+}
+.device-card h2 {
+  font-size: 28px;
+  letter-spacing: -0.6px;
 }
 .device-card:hover {
   background: #fff;
@@ -451,12 +456,12 @@ main {
   margin-bottom: 28px;
 }
 .object-icon {
-  border-radius: 16px;
+  border-radius: 18px;
   background: #f0f3ea;
-  font-size: 28px;
-  width: 46px;
-  height: 46px;
-  line-height: 46px;
+  font-size: 34px;
+  width: 60px;
+  height: 60px;
+  line-height: 60px;
   border: 1px solid var(--line);
   text-align: center;
   color: #4e7460;
@@ -732,6 +737,15 @@ footer {
   margin-bottom: 22px;
   background: linear-gradient(120deg, #edf2e8, #f7f8f3);
 }
+.cards + .placement-invite,
+.panel + .placement-invite {
+  margin-top: 32px;
+}
+.placement-choices {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
 .placement-invite h2 {
   font-size: 17px;
   margin-bottom: 6px;
@@ -958,7 +972,8 @@ footer {
   .placement-invite {
     padding: 23px;
   }
-  .placement-invite button {
+  .placement-invite button,
+  .placement-choices {
     width: 100%;
   }
   .notice {

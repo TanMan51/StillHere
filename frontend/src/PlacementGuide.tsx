@@ -2,11 +2,7 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import PlacementContextForm from "./PlacementContext";
 import { placementRisks, riskCost } from "./placementRisks";
-import {
-  placementResult,
-  questionsForPlacement,
-  type PlacementIdea,
-} from "./placement";
+import { placementResult, questionsForPlacement, type PlacementIdea } from "./placement";
 
 export function PlacementHelp() {
   const navigate = useNavigate();
@@ -16,9 +12,34 @@ export function PlacementHelp() {
         <h2>Tracker placement guide</h2>
         <p>Compare five ideas with a few questions about everyday use.</p>
       </div>
-      <button onClick={() => navigate("/placement")}>
-        Help me choose a spot
-      </button>
+      <button onClick={() => navigate("/placement")}>Help me choose a spot</button>
+    </section>
+  );
+}
+
+export function SetupPrompt() {
+  const navigate = useNavigate();
+  const [asking, setAsking] = useState(false);
+  return (
+    <section className="placement-invite" aria-labelledby="setup-prompt-title">
+      <div>
+        <h2 id="setup-prompt-title">Set up your device</h2>
+        <p>
+          {asking
+            ? "Do you already know where this sensor will go?"
+            : "Connect a new sensor and choose where it lives."}
+        </p>
+      </div>
+      {asking ? (
+        <div className="placement-choices">
+          <button className="secondary" onClick={() => navigate("/setup")}>
+            Yes, I know the spot
+          </button>
+          <button onClick={() => navigate("/placement")}>Help me choose a spot</button>
+        </div>
+      ) : (
+        <button onClick={() => setAsking(true)}>Set up your device</button>
+      )}
     </section>
   );
 }
@@ -53,9 +74,7 @@ export default function PlacementGuide() {
       setError("Enter at least one idea to get started.");
       return;
     }
-    if (
-      new Set(filled.map((name) => name.toLowerCase())).size !== filled.length
-    ) {
+    if (new Set(filled.map((name) => name.toLowerCase())).size !== filled.length) {
       setError("Give each idea a different name so you can compare them.");
       return;
     }
@@ -116,26 +135,17 @@ export default function PlacementGuide() {
         ...placementResult(idea, household),
         risks: placementRisks(idea.name, idea.description, household),
       }))
-      .sort(
-        (a, b) => b.rank - a.rank || riskCost(a.risks) - riskCost(b.risks),
-      ) ?? [];
+      .sort((a, b) => b.rank - a.rank || riskCost(a.risks) - riskCost(b.risks)) ?? [];
   const best = results[0]?.rank ?? 0;
   const tied = results.filter(
     (result) =>
-      result.rank === best &&
-      best > 0 &&
-      riskCost(result.risks) === riskCost(results[0].risks),
+      result.rank === best && best > 0 && riskCost(result.risks) === riskCost(results[0].risks),
   );
   const needsContext = finished && tied.length > 1 && !selection;
   if (selection)
-    results.sort(
-      (a, b) =>
-        Number(b.name === selection.name) - Number(a.name === selection.name),
-    );
+    results.sort((a, b) => Number(b.name === selection.name) - Number(a.name === selection.name));
   const questions =
-    progress && !finished
-      ? questionsForPlacement(progress.ideas[progress.idea], household)
-      : [];
+    progress && !finished ? questionsForPlacement(progress.ideas[progress.idea], household) : [];
   return (
     <div className="placement-guide">
       <Link className="back" to="/dashboard">
@@ -155,8 +165,8 @@ export default function PlacementGuide() {
         <form className="panel" onSubmit={start}>
           <h2>Start with your five ideas</h2>
           <p>
-            Think of objects used during a normal day. Enter up to five
-            possibilities; one is enough to start.
+            Think of objects used during a normal day. Enter up to five possibilities; one is enough
+            to start.
           </p>
           <label>
             Household background (optional)
@@ -184,11 +194,7 @@ export default function PlacementGuide() {
                     ][index]
                   }
                   onChange={(event) => {
-                    setNames(
-                      names.map((value, i) =>
-                        i === index ? event.target.value : value,
-                      ),
-                    );
+                    setNames(names.map((value, i) => (i === index ? event.target.value : value)));
                     setError("");
                   }}
                 />
@@ -201,27 +207,21 @@ export default function PlacementGuide() {
                   placeholder="Where it is kept, how it is used, and how it is cleaned"
                   onChange={(event) =>
                     setDescriptions(
-                      descriptions.map((value, i) =>
-                        i === index ? event.target.value : value,
-                      ),
+                      descriptions.map((value, i) => (i === index ? event.target.value : value)),
                     )
                   }
                 />
               </label>
-              {name.trim() &&
-                placementRisks(name, descriptions[index], household).length >
-                  0 && (
-                  <div className="placement-risk">
-                    <strong>Potential concerns to check</strong>
-                    <ul>
-                      {placementRisks(name, descriptions[index], household).map(
-                        (risk) => (
-                          <li key={risk.key}>{risk.reason}</li>
-                        ),
-                      )}
-                    </ul>
-                  </div>
-                )}
+              {name.trim() && placementRisks(name, descriptions[index], household).length > 0 && (
+                <div className="placement-risk">
+                  <strong>Potential concerns to check</strong>
+                  <ul>
+                    {placementRisks(name, descriptions[index], household).map((risk) => (
+                      <li key={risk.key}>{risk.reason}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
             </div>
           ))}
           {error && (
@@ -237,8 +237,8 @@ export default function PlacementGuide() {
       ) : !finished ? (
         <section className="panel">
           <p className="eyebrow">
-            IDEA {progress.idea + 1} OF {progress.ideas.length} · QUESTION{" "}
-            {progress.question + 1} OF {questions.length}
+            IDEA {progress.idea + 1} OF {progress.ideas.length} · QUESTION {progress.question + 1}{" "}
+            OF {questions.length}
           </p>
           <ol className="placement-path" aria-label="Decision tree path">
             {questions.map((question, index) => (
@@ -273,9 +273,7 @@ export default function PlacementGuide() {
               No / not sure
             </button>
           </div>
-          <p className="muted">
-            If a spot does not fit, we’ll move to your next idea.
-          </p>
+          <p className="muted">If a spot does not fit, we’ll move to your next idea.</p>
           <button className="secondary" onClick={back}>
             Back
           </button>
@@ -283,9 +281,7 @@ export default function PlacementGuide() {
       ) : needsContext ? (
         <PlacementContextForm
           names={tied.map((result) => result.name)}
-          onChoose={(name, reason, rejected) =>
-            setSelection({ name, reason, rejected })
-          }
+          onChoose={(name, reason, rejected) => setSelection({ name, reason, rejected })}
           onBack={back}
         />
       ) : (
@@ -318,9 +314,7 @@ export default function PlacementGuide() {
                 </strong>
                 <p>
                   {selection?.rejected[result.name] ??
-                    (selection?.name === result.name
-                      ? selection.reason
-                      : result.reason)}
+                    (selection?.name === result.name ? selection.reason : result.reason)}
                 </p>
                 {result.risks.length > 0 && (
                   <div className="placement-risk">
@@ -344,8 +338,8 @@ export default function PlacementGuide() {
           </ol>
           {best > 0 && (
             <p>
-              Before settling on a spot, try a normal use of the object and
-              check that its movement appears on the dashboard.
+              Before settling on a spot, try a normal use of the object and check that its movement
+              appears on the dashboard.
             </p>
           )}
           <div className="button-row">

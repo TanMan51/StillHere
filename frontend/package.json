@@ -4,10 +4,10 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "dev": "vite --host 0.0.0.0",
-    "dev:live": "vite --host 0.0.0.0 --mode live",
+    "dev": "vite --host ::",
+    "dev:live": "vite --host :: --mode live",
     "build": "tsc -b && vite build",
-    "preview": "vite preview --host 0.0.0.0",
+    "preview": "vite preview --host ::",
     "test": "vitest run",
     "format": "prettier --write .",
     "format:check": "prettier --check ."
