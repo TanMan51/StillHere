@@ -46,7 +46,8 @@ DEMO_TIME_SCALE = float(os.getenv("DEMO_TIME_SCALE", "1440"))
 
 # Durations the contract says are measured in REAL time, even in demo mode.
 OFFLINE_AFTER = timedelta(hours=2)
-REPLY_WINDOW = timedelta(seconds=30)
+# REPLY_WINDOW_SECONDS shortens the "Are you okay?" wait for hardware testing; the contract says 30.
+REPLY_WINDOW = timedelta(seconds=float(os.getenv("REPLY_WINDOW_SECONDS", "30")))
 
 # The check loop runs every CHECK_INTERVAL_SECONDS real seconds. It is cheap, so one short
 # interval serves both normal and demo mode. CHECKER_ENABLED=false turns it off (tests).
