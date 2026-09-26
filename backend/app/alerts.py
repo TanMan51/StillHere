@@ -95,6 +95,20 @@ def record_check_in(session: Session, device: Device) -> None:
     log.info("%s: family check-in counted as activity", device.id)
 
 
+def reply_trigger(session: Session, device: Device) -> str:
+    """The event ("loud" or "fall") that started the current "Are you okay?" check."""
+    trigger = session.exec(
+        select(Event.type)
+        .where(
+            Event.device_id == device.id,
+            col(Event.type).in_(("loud", "fall")),
+            Event.ts <= device.status_since,
+        )
+        .order_by(col(Event.ts).desc(), col(Event.id).desc())
+    ).first()
+    return trigger or "loud"
+
+
 def handle_event(session: Session, device: Device, event: Event) -> None:
     """Update device fields and status for one incoming event. Caller commits."""
     if event.type != "heartbeat":
@@ -137,7 +151,12 @@ def _handle_reply(session: Session, device: Device, value: str | None) -> None:
     # "I'm okay" (button or voice).
     if device.status == "awaiting_reply":
         _log_resolved(
-            session, device, "false_alarm", messages.false_alarm(device.name), "reply", False
+            session,
+            device,
+            "false_alarm",
+            messages.false_alarm(device.name, reply_trigger(session, device)),
+            "reply",
+            False,
         )
         device.reply_deadline_real = None
         set_status(device, "ok")
@@ -160,7 +179,8 @@ def check_device(session: Session, device: Device) -> None:
 
     deadline = clock.as_utc(device.reply_deadline_real)
     if device.status == "awaiting_reply" and deadline and real_now >= deadline:
-        raise_alert(session, device, "no_reply", messages.no_reply(device.name))
+        message = messages.no_reply(device.name, reply_trigger(session, device))
+        raise_alert(session, device, "no_reply", message)
         device.reply_deadline_real = None
         set_status(device, "no_reply_alert")
         return

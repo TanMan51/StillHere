@@ -33,15 +33,20 @@ def resident_urgent(first_name: str, unit: str) -> str:
     )
 
 
-def no_reply(device_name: str) -> str:
+def _trigger_phrase(trigger: str) -> str:
+    return "Possible fall detected" if trigger == "fall" else "Loud sound"
+
+
+def no_reply(device_name: str, trigger: str = "loud") -> str:
+    """trigger is the event that started the "Are you okay?" check: "loud" or "fall"."""
     return (
-        "StillHere: Loud sound at Mom's, and no reply when asked if she's okay. "
+        f"StillHere: {_trigger_phrase(trigger)} at Mom's, and no reply when asked if she's okay. "
         "You may want to call."
     )
 
 
-def false_alarm(device_name: str) -> str:
-    return 'Loud sound, then Mom pressed "I\'m okay". No text sent.'
+def false_alarm(device_name: str, trigger: str = "loud") -> str:
+    return f'{_trigger_phrase(trigger)}, then Mom pressed "I\'m okay". No text sent.'
 
 
 def offline(device_name: str) -> str:
