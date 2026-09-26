@@ -271,7 +271,7 @@ def test_loud_then_help_is_urgent(client):
     assert device["active_alert"]["sms_sent"] is True
 
 
-def test_loud_then_silence_sends_no_reply(client, monkeypatch):
+def test_fall_then_silence_sends_no_reply(client, monkeypatch):
     from datetime import timedelta
 
     from app import checker, config
@@ -283,9 +283,21 @@ def test_loud_then_silence_sends_no_reply(client, monkeypatch):
     device = _fridge(client)
     assert device["status"] == "no_reply_alert"
     assert device["active_alert"]["kind"] == "no_reply"
+    assert "Possible fall detected" in device["active_alert"]["message"]
 
     _event(client, {"type": "motion"})
     assert _fridge(client)["status"] == "ok"
+
+
+def test_loud_no_reply_text_says_loud_sound(client, monkeypatch):
+    from datetime import timedelta
+
+    from app import checker, config
+
+    monkeypatch.setattr(config, "REPLY_WINDOW", timedelta(seconds=0))
+    _event(client, {"type": "loud", "level": 2400})
+    checker.check_all()
+    assert "Loud sound" in _fridge(client)["active_alert"]["message"]
 
 
 def test_family_resolve_returns_device_to_ok(client):
