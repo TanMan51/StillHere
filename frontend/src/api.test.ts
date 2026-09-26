@@ -77,13 +77,11 @@ describe("live API transport", () => {
   it("surfaces server errors without substituting fixtures", async () => {
     vi.stubGlobal(
       "fetch",
-      vi
-        .fn()
-        .mockResolvedValue(
-          new Response(JSON.stringify({ detail: "Unknown device" }), {
-            status: 404,
-          }),
-        ),
+      vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({ detail: "Unknown device" }), {
+          status: 404,
+        }),
+      ),
     );
     const { api } = await import("./api");
     await expect(api.device("missing")).rejects.toThrow("Unknown device");

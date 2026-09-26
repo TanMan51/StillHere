@@ -5,8 +5,10 @@ Tests cover the fixed fallback, learning, countdowns, and daylight saving time.
 """
 
 from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 
-from app.routine import compute_baseline, evaluate, generate_week, next_alert_time
+import pytest
+from app.routine import Baseline, compute_baseline, evaluate, generate_week, next_alert_time
 
 UTC = timezone.utc
 NOW = datetime(2026, 9, 26, 14, 15, tzinfo=UTC)
@@ -14,14 +16,14 @@ TZ = "America/New_York"
 LIMIT = 720
 
 
-def test_empty_history_is_not_ready():
+def test_empty_history_is_not_ready() -> None:
     baseline = compute_baseline([], NOW, TZ)
     assert baseline.ready is False
     assert len(baseline.hourly_activity) == 24
     assert len(baseline.hourly_threshold_minutes) == 24
 
 
-def test_baseline_dict_matches_contract_fields():
+def test_baseline_dict_matches_contract_fields() -> None:
     fields = set(compute_baseline([], NOW, TZ).to_dict())
     assert fields == {
         "ready",
@@ -32,38 +34,38 @@ def test_baseline_dict_matches_contract_fields():
     }
 
 
-def test_gap_past_fixed_limit_is_flagged():
+def test_gap_past_fixed_limit_is_flagged() -> None:
     baseline = compute_baseline([], NOW, TZ)
     verdict = evaluate(baseline, NOW - timedelta(hours=13), NOW, LIMIT, "Mom's fridge")
     assert verdict.irregular is True
     assert verdict.reason == "fixed_limit"
 
 
-def test_recent_motion_is_not_flagged():
+def test_recent_motion_is_not_flagged() -> None:
     baseline = compute_baseline([], NOW, TZ)
     verdict = evaluate(baseline, NOW - timedelta(minutes=20), NOW, LIMIT, "Mom's fridge")
     assert verdict.irregular is False
 
 
-def test_no_motion_ever_is_not_flagged():
+def test_no_motion_ever_is_not_flagged() -> None:
     baseline = compute_baseline([], NOW, TZ)
     assert evaluate(baseline, None, NOW, LIMIT, "Mom's fridge").irregular is False
     assert next_alert_time(baseline, None, NOW, LIMIT) is None
 
 
-def test_next_alert_uses_fixed_limit_when_not_ready():
+def test_next_alert_uses_fixed_limit_when_not_ready() -> None:
     baseline = compute_baseline([], NOW, TZ)
     last = NOW - timedelta(hours=1)
     assert next_alert_time(baseline, last, NOW, LIMIT) == last + timedelta(minutes=LIMIT)
 
 
-def test_generate_week_is_sorted_and_not_in_future():
+def test_generate_week_is_sorted_and_not_in_future() -> None:
     times = generate_week(NOW, TZ)
     assert times == sorted(times)
     assert all(t <= NOW for t in times)
 
 
-def test_normal_morning_is_not_flagged():
+def test_normal_morning_is_not_flagged() -> None:
     morning = NOW.replace(hour=12, minute=30)
     times = generate_week(morning, TZ)
     baseline = compute_baseline(times, morning, TZ)
@@ -71,9 +73,7 @@ def test_normal_morning_is_not_flagged():
     assert not evaluate(baseline, times[-1], morning, LIMIT, "Fridge").irregular
 
 
-def test_missed_breakfast_is_flagged():
-    from zoneinfo import ZoneInfo
-
+def test_missed_breakfast_is_flagged() -> None:
     today = NOW.astimezone(ZoneInfo(TZ)).date()
     history = [t for t in generate_week(NOW, TZ) if t.astimezone(ZoneInfo(TZ)).date() < today]
     baseline = compute_baseline(history, NOW, TZ)
@@ -82,7 +82,7 @@ def test_missed_breakfast_is_flagged():
     assert TZ in verdict.note
 
 
-def test_normal_overnight_gap_is_not_flagged():
+def test_normal_overnight_gap_is_not_flagged() -> None:
     overnight = NOW.replace(hour=9, minute=0)
     times = generate_week(overnight, TZ)
     baseline = compute_baseline(times, overnight, TZ)
@@ -90,27 +90,25 @@ def test_normal_overnight_gap_is_not_flagged():
     assert not evaluate(baseline, times[-1], overnight, LIMIT, "Fridge").irregular
 
 
-def test_short_history_is_not_ready():
+def test_short_history_is_not_ready() -> None:
     assert not compute_baseline(generate_week(NOW, TZ, days=4), NOW, TZ).ready
 
 
-def test_future_and_duplicate_events_do_not_change_baseline():
+def test_future_and_duplicate_events_do_not_change_baseline() -> None:
     history = generate_week(NOW, TZ)
     assert compute_baseline(history, NOW, TZ) == compute_baseline(
         history + history + [NOW + timedelta(days=1)], NOW, TZ
     )
 
 
-def test_synthetic_week_is_nonempty_deterministic_and_bounded():
+def test_synthetic_week_is_nonempty_deterministic_and_bounded() -> None:
     times = generate_week(NOW, TZ)
     assert len(times) >= 60
     assert times == generate_week(NOW, TZ)
     assert all(NOW - timedelta(days=7) <= t <= NOW for t in times)
 
 
-def test_next_alert_detects_threshold_drop_at_next_hour():
-    from app.routine import Baseline
-
+def test_next_alert_detects_threshold_drop_at_next_hour() -> None:
     baseline = Baseline(True, 7, "UTC", [1] * 24, [720] * 24)
     baseline.hourly_threshold_minutes[10] = 60
     now = NOW.replace(hour=9, minute=50, second=0)
@@ -121,22 +119,18 @@ def test_next_alert_detects_threshold_drop_at_next_hour():
     assert evaluate(baseline, last, expected, 1440, "Fridge").irregular
 
 
-def test_fixed_limit_caps_learned_threshold():
-    from app.routine import Baseline
-
+def test_fixed_limit_caps_learned_threshold() -> None:
     baseline = Baseline(True, 7, TZ, [1] * 24, [2000] * 24)
     verdict = evaluate(baseline, NOW - timedelta(minutes=720), NOW, 720, "Fridge")
     assert verdict.irregular and verdict.reason == "fixed_limit"
 
 
-def test_naive_dates_are_rejected():
-    import pytest
-
+def test_naive_dates_are_rejected() -> None:
     with pytest.raises(ValueError, match="timezone-aware"):
         compute_baseline([], NOW.replace(tzinfo=None), TZ)
 
 
-def test_dst_history_and_next_alert_are_consistent():
+def test_dst_history_and_next_alert_are_consistent() -> None:
     end = datetime(2026, 11, 1, 8, tzinfo=UTC)
     history = generate_week(end, TZ)
     baseline = compute_baseline(history, end, TZ)

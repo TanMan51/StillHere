@@ -55,24 +55,26 @@ def compute_baseline(motion_times: list[datetime], now: datetime, timezone: str)
     """
     end = _utc(now)
     zone = ZoneInfo(timezone)
-    times = sorted({_utc(t) for t in motion_times if end - timedelta(days=28) <= _utc(t) < end})
+    history_start = end - timedelta(days=28)
+    normalized_times = {_utc(t) for t in motion_times}
+    times = sorted(t for t in normalized_times if history_start <= t < end)
     if not times:
         return Baseline(False, 0, timezone)
     first_day = times[0].astimezone(zone).date()
     today = end.astimezone(zone).date()
     observed_days = (today - first_day).days
     counts = [0] * 24
+    complete_active_days = set()
     for t in times:
-        if t.astimezone(zone).date() < today:
-            counts[t.astimezone(zone).hour] += 1
-    # Require five complete local days with motion; exclude the first partial day.
-    complete_active_days = {
-        t.astimezone(zone).date() for t in times if first_day < t.astimezone(zone).date() < today
-    }
+        local = t.astimezone(zone)
+        if local.date() < today:
+            counts[local.hour] += 1
+        # Require five complete local days with motion; exclude the first partial day.
+        if first_day < local.date() < today:
+            complete_active_days.add(local.date())
     samples: list[list[float]] = [[] for _ in range(24)]
-    cursor = times[0].astimezone(zone).replace(minute=0, second=0, microsecond=0).astimezone(
-        UTC
-    ) + timedelta(hours=1)
+    first_hour = times[0].astimezone(zone).replace(minute=0, second=0, microsecond=0)
+    cursor = first_hour.astimezone(UTC) + timedelta(hours=1)
     while cursor + timedelta(hours=1) <= end:
         stop = cursor + timedelta(hours=1)
         local = cursor.astimezone(zone)

@@ -78,8 +78,8 @@ try {
     fullPage: true,
   });
   assert.deepEqual(errors, [], "No browser runtime errors");
-  console.log(
-    "Browser checks passed: overview, settings, resolve, contacts, QR, demo, mobile layout.",
+  process.stdout.write(
+    "Browser checks passed: overview, settings, resolve, contacts, QR, demo, mobile layout.\n",
   );
 } finally {
   await browser.close();

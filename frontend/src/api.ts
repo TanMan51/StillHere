@@ -26,9 +26,12 @@ async function request<T>(
     signal: AbortSignal.timeout(10000),
   });
   if (!response.ok) {
-    const error = await response.json().catch(() => null);
+    const error: unknown = await response.json().catch(() => null);
     throw new Error(
-      typeof error?.detail === "string"
+      typeof error === "object" &&
+        error !== null &&
+        "detail" in error &&
+        typeof error.detail === "string"
         ? error.detail
         : `Request failed (${response.status})`,
     );
@@ -52,7 +55,10 @@ export const api = {
     request<Contact>("/contacts", "POST", body),
   deleteContact: (id: number) => request<void>(`/contacts/${id}`, "DELETE"),
   testContact: (id: number) =>
-    request<{ ok: boolean; channel: string }>(`/contacts/${id}/test`, "POST"),
+    request<{ ok: boolean; channel: "sms" | "email" }>(
+      `/contacts/${id}/test`,
+      "POST",
+    ),
   demo: () => request<Demo>("/demo"),
   setDemo: (body: {
     enabled: boolean;

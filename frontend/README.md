@@ -40,7 +40,8 @@ npm.cmd run build
 With the dev server running, `node scripts/check-browser.mjs` exercises the
 main flows in headless Chrome and writes desktop/mobile screenshots to
 `frontend/screenshots/`. Set `BROWSER_CHANNEL=msedge` to use Edge instead.
-Format frontend changes with `npx.cmd prettier --write src`.
+Format frontend changes with `npm.cmd run format`; verify with `npm.cmd run format:check`.
+Generated output, local environments, and dependency caches are excluded in `.prettierignore`.
 
 ## The big picture
 
@@ -191,8 +192,8 @@ cd backend
 For a fresh machine, create that environment with `python -m venv frontend/.venv`
 from the root, then install `pytest tzdata` with its Python's `-m pip install`.
 The routine implementation uses the standard library, but Windows typically
-needs the `tzdata` package to supply the IANA timezone database. Person A should
-include that deployment requirement if the host lacks system timezone data.
+needs the `tzdata` package to supply the IANA timezone database. It is now included
+in Person A's `backend/requirements.txt`.
 
 Tests cover normal mornings, missed breakfast, overnight gaps, readiness,
 duplicate/future events, deterministic synthetic history, a threshold drop at

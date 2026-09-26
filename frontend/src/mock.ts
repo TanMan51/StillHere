@@ -1,10 +1,9 @@
 import deviceFixture from "../../contract/fixtures/devices.json";
 import detailFixture from "../../contract/fixtures/device_detail.json";
 import contactFixture from "../../contract/fixtures/contacts.json";
-import type { Contact, Demo, DeviceDetail } from "./types";
+import type { Baseline, Contact, Demo, Device, DeviceDetail } from "./types";
 
 // Stateful, in-memory fixtures: edits survive polling, but a reload restores the demo.
-let devices = structuredClone(deviceFixture.devices) as DeviceDetail[];
 let contacts = structuredClone(contactFixture) as Contact[];
 let nextContact = 3;
 let clockAnchor = Date.parse(deviceFixture.server_now);
@@ -19,20 +18,26 @@ const now = () =>
   new Date(
     clockAnchor + (Date.now() - realAnchor) * demo.time_scale,
   ).toISOString();
-const emptyBaseline = () => ({
+const emptyBaseline = (): Baseline => ({
   ready: false,
   days_of_data: 0,
   timezone: "America/New_York",
   hourly_activity: Array(24).fill(0),
   hourly_threshold_minutes: Array(24).fill(0),
 });
-devices = devices.map((d) => ({
+const devices: DeviceDetail[] = (
+  structuredClone(deviceFixture.devices) as Device[]
+).map((d) => ({
   ...d,
   events: [],
   alerts: d.active_alert ? [d.active_alert] : [],
   baseline: emptyBaseline(),
 }));
-devices[0] = structuredClone(detailFixture.device) as DeviceDetail;
+const detailIndex = devices.findIndex(
+  (device) => device.id === detailFixture.device.id,
+);
+if (detailIndex >= 0)
+  devices[detailIndex] = structuredClone(detailFixture.device) as DeviceDetail;
 
 export async function mockRequest(
   path: string,
