@@ -287,6 +287,7 @@ Wording lives in `backend/app/messages.py`. These are examples, not a fixed form
 - `inactivity` (fixed): "StillHere: No activity from Mom's fridge since 8:15 PM. You may want to call her."
 - `urgent`: "URGENT from StillHere: Mom asked for help near the fridge. Please call her now."
 - `no_reply`: "StillHere: Loud sound at Mom's, and no reply when asked if she's okay. You may want to call."
+- `no_reply` after a fall: "StillHere: Possible fall detected at Mom's, and no reply when asked if she's okay. You may want to call."
 - `offline`: "StillHere: Mom's front door sensor is offline. Its battery or Wi-Fi may need a check."
 - `all_clear`: "StillHere: Activity detected at Mom's fridge since the alert. She's likely okay."
 
@@ -302,3 +303,4 @@ Wording lives in `backend/app/messages.py`. These are examples, not a fixed form
   on dashboard endpoints, `GET/PATCH /api/residents`, and `resident_id` on Device.
 - Add the community housing grid: `GET/PATCH /api/community`.
 - `POST /api/alerts/{id}/resolve` also records the check-in as a `motion` event.
+- Add the fall wording for `no_reply` and `false_alarm` alert messages.
