@@ -140,11 +140,29 @@ def evaluate(
     if reason == "learned":
         local = current.astimezone(ZoneInfo(baseline.timezone))
         note = (
-            f"{device_name} has had no activity for {int(gap)} minutes. "
-            f"That is longer than usual around {local.strftime('%I:%M %p')} "
-            f"({baseline.timezone}). You may want to check in."
+            f"{device_name} has had no activity for {describe_duration(gap)}, "
+            f"which is longer than usual around {_clock_hour(local)}. "
+            "You may want to check in."
         )
     return Verdict(True, reason, note)
+
+
+def describe_duration(minutes: float) -> str:
+    """Round a span for people: 675 -> "about 11 hours", 45 -> "45 minutes"."""
+    if minutes < 60:
+        whole = max(1, int(minutes))
+        return f"{whole} minute" + ("" if whole == 1 else "s")
+    hours = round(minutes / 60)
+    if hours < 2:
+        return "about an hour"
+    if hours < 36:
+        return f"about {hours} hours"
+    return f"about {round(hours / 24)} days"
+
+
+def _clock_hour(local: datetime) -> str:
+    """8 AM rather than 08:00 AM; strftime's no-padding flag isn't portable."""
+    return f"{local.hour % 12 or 12} {'AM' if local.hour < 12 else 'PM'}"
 
 
 def next_alert_time(

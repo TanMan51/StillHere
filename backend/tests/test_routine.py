@@ -9,6 +9,7 @@ from zoneinfo import ZoneInfo
 
 import pytest
 from app.routine import Baseline, compute_baseline, evaluate, generate_week, next_alert_time
+from app.routine.baseline import describe_duration
 
 UTC = timezone.utc
 NOW = datetime(2026, 9, 26, 14, 15, tzinfo=UTC)
@@ -79,7 +80,22 @@ def test_missed_breakfast_is_flagged() -> None:
     baseline = compute_baseline(history, NOW, TZ)
     verdict = evaluate(baseline, history[-1], NOW, 1440, "Fridge")
     assert verdict.irregular and verdict.reason == "learned"
-    assert TZ in verdict.note
+    assert "around 10 AM" in verdict.note
+    assert "minutes" not in verdict.note
+
+
+@pytest.mark.parametrize(
+    ("minutes", "text"),
+    [
+        (0.5, "1 minute"),
+        (45, "45 minutes"),
+        (75, "about an hour"),
+        (675, "about 11 hours"),
+        (2880, "about 2 days"),
+    ],
+)
+def test_durations_read_naturally(minutes: float, text: str) -> None:
+    assert describe_duration(minutes) == text
 
 
 def test_normal_overnight_gap_is_not_flagged() -> None:
