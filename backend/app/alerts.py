@@ -89,6 +89,10 @@ def _log_resolved(session: Session, device: Device, kind: str, message: str, by:
 
 def handle_event(session: Session, device: Device, event: Event) -> None:
     """Update device fields and status for one incoming event. Caller commits."""
+    if event.type != "heartbeat":
+        log.info(
+            "%s: %s event (value=%s, level=%s)", device.id, event.type, event.value, event.level
+        )
     device.last_seen_real_at = clock.real_now()
     if device.status == "offline":
         resolve_open_alerts(session, device, "heartbeat")
