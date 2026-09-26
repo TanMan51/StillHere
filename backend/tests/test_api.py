@@ -397,3 +397,23 @@ def test_resend_email_request(monkeypatch):
         "subject": "StillHere alert",
         "text": "hello",
     }
+
+
+def test_frontend_routes_fall_back_to_index(tmp_path):
+    from app.main import mount_frontend
+    from fastapi import FastAPI
+
+    (tmp_path / "assets").mkdir()
+    (tmp_path / "assets" / "app.js").write_text("js")
+    (tmp_path / "index.html").write_text("<html>dashboard</html>")
+    (tmp_path / "manifest.webmanifest").write_text("{}")
+    app = FastAPI()
+    mount_frontend(app, tmp_path)
+    web = TestClient(app)
+
+    assert web.get("/").text == "<html>dashboard</html>"
+    assert web.get("/demo").text == "<html>dashboard</html>"
+    assert web.get("/assets/app.js").text == "js"
+    assert web.get("/manifest.webmanifest").text == "{}"
+    assert web.get("/api/nope").status_code == 404
+    assert web.get("/../backend/app/config.py").text == "<html>dashboard</html>"
