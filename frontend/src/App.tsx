@@ -14,7 +14,7 @@ import { QRCodeSVG } from "qrcode.react";
 import { api, useMock } from "./api";
 import { usePoll, useTick } from "./hooks";
 import type { Device, Status } from "./types";
-import PlacementGuide, { PlacementHelp, SetupPrompt } from "./PlacementGuide";
+import PlacementGuide, { DeviceSetup, SetupPrompt } from "./PlacementGuide";
 import { hasDemoSession, saveDemoSession } from "./Login";
 import LandingPage from "./LandingPage";
 
@@ -35,14 +35,20 @@ const date = (value: string, timezone?: string) =>
     minute: "2-digit",
     timeZone: timezone,
   });
+// Rounded for people: 675 minutes reads as "about 11 hours".
+function roughDuration(seconds: number) {
+  if (seconds < 60) return `${seconds} second${seconds === 1 ? "" : "s"}`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes} minute${minutes === 1 ? "" : "s"}`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 2) return "about an hour";
+  if (hours < 36) return `about ${hours} hours`;
+  return `about ${Math.round(hours / 24)} days`;
+}
 function ago(value: string | null, server: string) {
   if (!value) return "No activity recorded";
-  const minutes = Math.max(0, Math.floor((Date.parse(server) - Date.parse(value)) / 60000));
-  return minutes < 1
-    ? "Just now"
-    : minutes < 60
-      ? `${minutes} min ago`
-      : `${Math.floor(minutes / 60)}h ${minutes % 60}m ago`;
+  const seconds = Math.max(0, Math.floor((Date.parse(server) - Date.parse(value)) / 1000));
+  return seconds < 60 ? "Just now" : `${roughDuration(seconds)} ago`;
 }
 function Badge({ status }: { status: Status }) {
   return (
@@ -68,11 +74,7 @@ function Countdown({ device, receivedAt }: { device: Device; receivedAt: number 
     device.seconds_until_alert - Math.floor(Math.max(0, now - receivedAt) / 1000),
   );
   return (
-    <span>
-      {seconds === 0
-        ? "Checking activity…"
-        : `${Math.floor(seconds / 3600)}h ${Math.floor((seconds % 3600) / 60)}m ${seconds % 60}s until check-in`}
-    </span>
+    <span>{seconds === 0 ? "Checking activity…" : `Check-in in ${roughDuration(seconds)}`}</span>
   );
 }
 function Feedback({ error }: { error: string }) {
@@ -468,31 +470,45 @@ function Contacts() {
     </>
   );
 }
+// A phone treats "localhost" as itself, so local dev points the QR code at the deployed site.
+const DEPLOYED_URL = "https://stillhere-production-8652.up.railway.app";
+function phoneReachableUrl() {
+  const local = ["localhost", "127.0.0.1", "[::1]"].includes(window.location.hostname);
+  return local ? DEPLOYED_URL : window.location.origin;
+}
 function Setup() {
-  const [url, setUrl] = useState(window.location.origin);
-  let valid = false;
+  const [url, setUrl] = useState(phoneReachableUrl);
+  let setupUrl = "";
   try {
-    valid = ["http:", "https:"].includes(new URL(url).protocol);
+    const site = new URL(url);
+    if (["http:", "https:"].includes(site.protocol)) setupUrl = new URL("/setup-device", site).href;
   } catch {
     /* Display validation below. */
   }
   return (
     <>
       <Heading eyebrow="CONFIGURATION" title="Setup" />
-      <PlacementHelp />
       <section className="panel setup">
-        <h2>Dashboard QR code</h2>
-        <p>Use the deployed dashboard address so another phone can reach it.</p>
+        <h2>Set up on your phone</h2>
+        <p>
+          Scan this next to the object you want to monitor. It opens the placement guide on your
+          phone so you can pick the best spot for the sensor.
+        </p>
         <label>
-          Dashboard URL
+          Site address
           <input type="url" value={url} onChange={(e) => setUrl(e.target.value)} />
         </label>
-        {valid ? (
-          <QRCodeSVG value={url} size={200} marginSize={4} title="Scan to open StillHere" />
+        {setupUrl ? (
+          <QRCodeSVG
+            value={setupUrl}
+            size={200}
+            marginSize={4}
+            title="Scan to set up your device"
+          />
         ) : (
           <p role="alert">Enter a complete http or https address.</p>
         )}
-        <p>Scan with a phone camera, then choose “Add to Home Screen” in the browser menu.</p>
+        {setupUrl && <small>Opens {setupUrl}</small>}
         <small>A localhost address only works on this computer.</small>
       </section>
     </>
@@ -661,6 +677,7 @@ export default function App() {
           <Route path="/devices/:id" element={<DevicePage />} />
           <Route path="/contacts" element={<Contacts />} />
           <Route path="/setup" element={<Setup />} />
+          <Route path="/setup-device" element={<DeviceSetup />} />
           <Route path="/placement" element={<PlacementGuide />} />
           <Route path="/demo" element={<DemoPage />} />
           <Route

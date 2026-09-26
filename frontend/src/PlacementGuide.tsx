@@ -4,43 +4,58 @@ import PlacementContextForm from "./PlacementContext";
 import { placementRisks, riskCost } from "./placementRisks";
 import { placementResult, questionsForPlacement, type PlacementIdea } from "./placement";
 
-export function PlacementHelp() {
-  const navigate = useNavigate();
-  return (
-    <section className="placement-invite">
-      <div>
-        <h2>Tracker placement guide</h2>
-        <p>Compare five ideas with a few questions about everyday use.</p>
-      </div>
-      <button onClick={() => navigate("/placement")}>Help me choose a spot</button>
-    </section>
-  );
-}
-
 export function SetupPrompt() {
   const navigate = useNavigate();
-  const [asking, setAsking] = useState(false);
   return (
     <section className="placement-invite" aria-labelledby="setup-prompt-title">
       <div>
         <h2 id="setup-prompt-title">Set up your device</h2>
-        <p>
-          {asking
-            ? "Do you already know where this sensor will go?"
-            : "Connect a new sensor and choose where it lives."}
-        </p>
+        <p>Connect a new sensor and choose where it lives.</p>
       </div>
-      {asking ? (
-        <div className="placement-choices">
-          <button className="secondary" onClick={() => navigate("/setup")}>
-            Yes, I know the spot
-          </button>
-          <button onClick={() => navigate("/placement")}>Help me choose a spot</button>
-        </div>
-      ) : (
-        <button onClick={() => setAsking(true)}>Set up your device</button>
-      )}
+      <button onClick={() => navigate("/setup-device")}>Set up your device</button>
     </section>
+  );
+}
+
+// Asks first so people who already know the spot skip the placement questions.
+export function DeviceSetup() {
+  const navigate = useNavigate();
+  const [knowsSpot, setKnowsSpot] = useState(false);
+  return (
+    <div className="placement-guide">
+      <Link className="back" to="/dashboard">
+        ← Back to overview
+      </Link>
+      <p className="eyebrow">DEVICE SETUP</p>
+      <h1>Set up your device</h1>
+      {knowsSpot ? (
+        <section className="panel">
+          <h2>Attach the sensor</h2>
+          <ol className="setup-steps">
+            <li>Attach the sensor firmly to the object so it moves when the object is used.</li>
+            <li>Plug in or power on the sensor and keep it within range of your Wi-Fi.</li>
+            <li>Use the object once. The device card updates within a few seconds.</li>
+          </ol>
+          <div className="placement-choices">
+            <button className="secondary" onClick={() => setKnowsSpot(false)}>
+              Back
+            </button>
+            <button onClick={() => navigate("/dashboard")}>Go to my devices</button>
+          </div>
+        </section>
+      ) : (
+        <section className="panel">
+          <h2>Do you already know where this sensor will go?</h2>
+          <p>If you&apos;re not sure, a few questions will help you pick an everyday object.</p>
+          <div className="placement-choices">
+            <button className="secondary" onClick={() => setKnowsSpot(true)}>
+              Yes, I know the spot
+            </button>
+            <button onClick={() => navigate("/placement")}>No, help me choose</button>
+          </div>
+        </section>
+      )}
+    </div>
   );
 }
 

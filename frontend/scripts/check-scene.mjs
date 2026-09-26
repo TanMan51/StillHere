@@ -56,8 +56,13 @@ try {
   await page.getByRole("link", { name: "View your devices" }).click();
   assert.ok(page.url().endsWith("#devices"));
   await page.getByRole("button", { name: "Set up your device" }).click();
-  await page.getByRole("button", { name: "Help me choose a spot" }).click();
+  await page.getByRole("button", { name: "Yes, I know the spot" }).click();
+  await page.getByRole("heading", { name: "Attach the sensor" }).waitFor();
+  assert.ok(page.url().endsWith("/setup-device"));
+  await page.getByRole("button", { name: "Back", exact: true }).click();
+  await page.getByRole("button", { name: "No, help me choose" }).click();
   assert.ok(page.url().endsWith("/placement"));
+  await page.goBack();
   await page.goBack();
   await page.goto("http://localhost:5173/");
   await page.locator(".landing-header").getByRole("button", { name: "Log in" }).click();
