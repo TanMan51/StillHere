@@ -333,3 +333,47 @@ def test_alerts_fall_back_to_email_when_texts_fail(client, monkeypatch):
         "ok": True,
         "channel": "email",
     }
+
+
+def _fake_urlopen(monkeypatch, reply: bytes):
+    from app import notify
+
+    sent = {}
+
+    class FakeResponse:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+        def read(self):
+            return reply
+
+    def fake(request, timeout):
+        sent["url"] = request.full_url
+        sent["data"] = request.data
+        return FakeResponse()
+
+    monkeypatch.setattr(notify.urllib.request, "urlopen", fake)
+    return sent
+
+
+def test_textbelt_request_and_error(monkeypatch):
+    from urllib.parse import parse_qs
+
+    from app import config, notify
+
+    monkeypatch.setattr(config, "TEXTBELT_API_KEY", "tb-key")
+    sent = _fake_urlopen(monkeypatch, b'{"success": true, "textId": "1", "quotaRemaining": 9}')
+    assert notify.send_sms("+14045550123", "hello") == "sms"
+    assert sent["url"] == config.TEXTBELT_API_URL
+    assert parse_qs(sent["data"].decode()) == {
+        "phone": ["+14045550123"],
+        "message": ["hello"],
+        "key": ["tb-key"],
+    }
+
+    _fake_urlopen(monkeypatch, b'{"success": false, "error": "Out of quota"}')
+    with pytest.raises(notify.SmsError, match="Out of quota"):
+        notify.send_sms("+14045550123", "hello")

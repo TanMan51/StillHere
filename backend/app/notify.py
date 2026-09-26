@@ -1,8 +1,8 @@
 """Outgoing texts and the email fallback. Owner: Person A.
 
 send_sms() picks the first configured provider: SimpleTexting (SIMPLETEXTING_API_KEY),
-then Twilio (TWILIO_*). With neither, it only logs the text (dry run), so local dev
-and tests never send real messages.
+then Textbelt (TEXTBELT_API_KEY), then Twilio (TWILIO_*). With none, it only logs the
+text (dry run), so local dev and tests never send real messages.
 
 send_email() goes to ALERT_EMAILS over SMTP. Callers use it when no SMS provider is
 set up or every text failed.
@@ -14,6 +14,7 @@ import json
 import logging
 import smtplib
 import urllib.error
+import urllib.parse
 import urllib.request
 from email.message import EmailMessage
 
@@ -31,7 +32,11 @@ class EmailError(Exception):
 
 
 def sms_configured() -> bool:
-    return simpletexting_configured() or twilio_configured()
+    return simpletexting_configured() or textbelt_configured() or twilio_configured()
+
+
+def textbelt_configured() -> bool:
+    return bool(config.TEXTBELT_API_KEY)
 
 
 def email_configured() -> bool:
@@ -74,6 +79,8 @@ def send_sms(to: str, body: str) -> str:
     """
     if simpletexting_configured():
         _send_simpletexting(to, body)
+    elif textbelt_configured():
+        _send_textbelt(to, body)
     elif twilio_configured():
         _send_twilio(to, body)
     else:
@@ -112,6 +119,29 @@ def _send_simpletexting(to: str, body: str) -> None:
         log.error("sms to %s failed: %s", to, e.reason)
         raise SmsError(f"SimpleTexting unreachable: {e.reason}") from e
     log.info("sms to %s sent via SimpleTexting: %s", to, result[:200])
+
+
+def _send_textbelt(to: str, body: str) -> None:
+    data = urllib.parse.urlencode(
+        {"phone": to, "message": body, "key": config.TEXTBELT_API_KEY}
+    ).encode()
+    request = urllib.request.Request(config.TEXTBELT_API_URL, data=data, method="POST")
+    try:
+        with urllib.request.urlopen(request, timeout=15) as response:
+            result = json.loads(response.read().decode(errors="replace"))
+    except (urllib.error.URLError, ValueError) as e:
+        log.error("sms to %s failed: Textbelt unreachable: %s", to, e)
+        raise SmsError(f"Textbelt unreachable: {e}") from e
+    if not result.get("success"):
+        error = result.get("error", "unknown error")
+        log.error("sms to %s failed: Textbelt: %s", to, error)
+        raise SmsError(f"Textbelt error: {error}")
+    log.info(
+        "sms to %s sent via Textbelt (id %s, %s credits left)",
+        to,
+        result.get("textId"),
+        result.get("quotaRemaining"),
+    )
 
 
 def _send_twilio(to: str, body: str) -> None:

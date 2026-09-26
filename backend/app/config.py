@@ -60,7 +60,11 @@ SIMPLETEXTING_API_URL = os.getenv(
     "SIMPLETEXTING_API_URL", "https://api-app2.simpletexting.com/v2/api/messages"
 )
 
-# Twilio. When neither provider is configured, notify.py logs texts instead of sending them.
+# Textbelt (https://textbelt.com). Used when set and SimpleTexting isn't.
+TEXTBELT_API_KEY = os.getenv("TEXTBELT_API_KEY", "")
+TEXTBELT_API_URL = os.getenv("TEXTBELT_API_URL", "https://textbelt.com/text")
+
+# Twilio. When no provider is configured, notify.py logs texts instead of sending them.
 TWILIO_ACCOUNT_SID = os.getenv("TWILIO_ACCOUNT_SID", "")
 TWILIO_AUTH_TOKEN = os.getenv("TWILIO_AUTH_TOKEN", "")
 TWILIO_FROM_NUMBER = os.getenv("TWILIO_FROM_NUMBER", "")
