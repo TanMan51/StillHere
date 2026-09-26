@@ -13,9 +13,11 @@ def _local_time(dt: datetime) -> str:
 
 
 def inactivity(device_name: str, last_motion: datetime, note: str | None = None) -> str:
-    extra = f" {note}" if note else ""
+    """note is the learned routine's own sentence (routine.evaluate), used as-is when present."""
+    if note:
+        return f"StillHere: {note}"
     return (
-        f"StillHere: No activity from {device_name} since {_local_time(last_motion)}.{extra} "
+        f"StillHere: No activity from {device_name} since {_local_time(last_motion)}. "
         "You may want to call her."
     )
 
@@ -45,3 +47,7 @@ def all_clear(device_name: str) -> str:
 
 def test_message(contact_name: str) -> str:
     return f"StillHere: Hi {contact_name}, this is a test. You'll get alerts at this number."
+
+
+def email_subject(body: str) -> str:
+    return "URGENT: StillHere alert" if body.startswith("URGENT") else "StillHere alert"

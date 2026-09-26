@@ -12,7 +12,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from . import config
+from . import checker, config
 from .api import contacts, demo, devices, events
 from .db import init_db
 
@@ -22,7 +22,9 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     init_db()
+    checker.start()
     yield
+    checker.stop()
 
 
 app = FastAPI(title="StillHere", lifespan=lifespan)

@@ -48,6 +48,11 @@ DEMO_TIME_SCALE = float(os.getenv("DEMO_TIME_SCALE", "1440"))
 OFFLINE_AFTER = timedelta(hours=2)
 REPLY_WINDOW = timedelta(seconds=30)
 
+# The check loop runs every CHECK_INTERVAL_SECONDS real seconds. It is cheap, so one short
+# interval serves both normal and demo mode. CHECKER_ENABLED=false turns it off (tests).
+CHECK_INTERVAL_SECONDS = float(os.getenv("CHECK_INTERVAL_SECONDS", "2"))
+CHECKER_ENABLED = os.getenv("CHECKER_ENABLED", "true").lower() != "false"
+
 # SimpleTexting. When the API key is set, texts go through SimpleTexting instead of Twilio.
 SIMPLETEXTING_API_KEY = os.getenv("SIMPLETEXTING_API_KEY", "")
 SIMPLETEXTING_FROM_NUMBER = os.getenv("SIMPLETEXTING_FROM_NUMBER", "")  # optional
@@ -55,7 +60,20 @@ SIMPLETEXTING_API_URL = os.getenv(
     "SIMPLETEXTING_API_URL", "https://api-app2.simpletexting.com/v2/api/messages"
 )
 
-# Twilio. When neither provider is configured, notify.py logs texts instead of sending them.
+# Textbelt (https://textbelt.com). Used when set and SimpleTexting isn't.
+TEXTBELT_API_KEY = os.getenv("TEXTBELT_API_KEY", "")
+TEXTBELT_API_URL = os.getenv("TEXTBELT_API_URL", "https://textbelt.com/text")
+
+# Twilio. When no provider is configured, notify.py logs texts instead of sending them.
 TWILIO_ACCOUNT_SID = os.getenv("TWILIO_ACCOUNT_SID", "")
 TWILIO_AUTH_TOKEN = os.getenv("TWILIO_AUTH_TOKEN", "")
 TWILIO_FROM_NUMBER = os.getenv("TWILIO_FROM_NUMBER", "")
+
+# Email fallback: used when no SMS provider is set up or every text fails.
+# For Gmail, SMTP_PASSWORD is an app password (Google Account > Security > App passwords).
+SMTP_HOST = os.getenv("SMTP_HOST", "smtp.gmail.com")
+SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
+SMTP_USER = os.getenv("SMTP_USER", "")
+SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "")
+EMAIL_FROM = os.getenv("EMAIL_FROM", "") or SMTP_USER
+ALERT_EMAILS = [e.strip() for e in os.getenv("ALERT_EMAILS", "").split(",") if e.strip()]

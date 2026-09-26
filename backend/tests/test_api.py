@@ -166,3 +166,214 @@ def test_simpletexting_request_shape(monkeypatch):
         "mode": "AUTO",
         "text": "hello",
     }
+
+
+# --- Alert state machine -------------------------------------------------------------------
+
+
+def _event(client, body):
+    body = {"device_id": "fridge-1", **body}
+    assert client.post("/api/events", json=body, headers=TOKEN).status_code == 202
+
+
+def _fridge(client):
+    return client.get("/api/devices/fridge-1").json()["device"]
+
+
+def _jump_clock(client, iso):
+    client.post("/api/demo", json={"enabled": True, "start_clock_at": iso})
+
+
+def test_motion_silence_alert_motion_all_clear(client):
+    from app import checker
+
+    client.post("/api/contacts", json={"name": "Sam", "phone": "+14045550123"})
+    _jump_clock(client, "2026-09-26T00:00:00Z")
+    _event(client, {"type": "motion"})
+    checker.check_all()
+    assert _fridge(client)["status"] == "ok"
+
+    _jump_clock(client, "2026-09-26T12:30:00Z")  # 12.5 h of silence, limit is 12 h
+    checker.check_all()
+    checker.check_all()  # a second pass must not fire again
+    device = _fridge(client)
+    assert device["status"] == "inactive_alert"
+    assert device["active_alert"]["kind"] == "inactivity"
+    assert device["active_alert"]["sms_sent"] is True
+    assert device["next_alert_at"] is None
+    assert [a["kind"] for a in device["alerts"]] == ["inactivity"]
+
+    _event(client, {"type": "motion"})
+    device = _fridge(client)
+    assert device["status"] == "ok"
+    assert device["active_alert"] is None
+    kinds = {a["kind"]: a for a in device["alerts"]}
+    assert kinds["inactivity"]["resolved_by"] == "motion"
+    assert kinds["all_clear"]["sms_sent"] is True
+
+
+def test_loud_then_ok_button_is_false_alarm(client):
+    _event(client, {"type": "motion"})
+    _event(client, {"type": "loud", "level": 2400})
+    assert _fridge(client)["status"] == "awaiting_reply"
+    _event(client, {"type": "reply", "value": "ok_button"})
+    device = _fridge(client)
+    assert device["status"] == "ok"
+    assert device["alerts"][0]["kind"] == "false_alarm"
+    assert device["alerts"][0]["sms_sent"] is False
+
+
+def test_loud_then_help_is_urgent(client):
+    client.post("/api/contacts", json={"name": "Sam", "phone": "+14045550123"})
+    _event(client, {"type": "loud", "level": 2400})
+    _event(client, {"type": "reply", "value": "help"})
+    device = _fridge(client)
+    assert device["status"] == "urgent"
+    assert device["active_alert"]["kind"] == "urgent"
+    assert device["active_alert"]["sms_sent"] is True
+
+
+def test_loud_then_silence_sends_no_reply(client, monkeypatch):
+    from datetime import timedelta
+
+    from app import checker, config
+
+    monkeypatch.setattr(config, "REPLY_WINDOW", timedelta(seconds=0))
+    _event(client, {"type": "motion"})
+    _event(client, {"type": "fall", "level": 3.7})
+    checker.check_all()
+    device = _fridge(client)
+    assert device["status"] == "no_reply_alert"
+    assert device["active_alert"]["kind"] == "no_reply"
+
+    _event(client, {"type": "motion"})
+    assert _fridge(client)["status"] == "ok"
+
+
+def test_family_resolve_returns_device_to_ok(client):
+    _event(client, {"type": "reply", "value": "help"})
+    alert_id = _fridge(client)["active_alert"]["id"]
+    assert client.post(f"/api/alerts/{alert_id}/resolve").json() == {"ok": True}
+    device = _fridge(client)
+    assert device["status"] == "ok"
+    assert device["alerts"][0]["resolved_by"] == "family"
+
+
+def test_silent_device_goes_offline_then_recovers(client, monkeypatch):
+    from datetime import timedelta
+
+    from app import checker, config
+
+    _event(client, {"type": "heartbeat"})
+    monkeypatch.setattr(config, "OFFLINE_AFTER", timedelta(seconds=-1))
+    checker.check_all()
+    device = _fridge(client)
+    assert device["status"] == "offline"
+    assert device["active_alert"]["kind"] == "offline"
+
+    monkeypatch.setattr(config, "OFFLINE_AFTER", timedelta(hours=2))
+    _event(client, {"type": "heartbeat"})
+    device = _fridge(client)
+    assert device["status"] == "ok"
+    assert device["alerts"][0]["resolved_by"] == "heartbeat"
+
+
+def test_one_bad_device_does_not_stop_the_loop(client, monkeypatch):
+    from app import alerts, checker
+
+    checked = []
+    real_check = alerts.check_device
+
+    def flaky(session, device):
+        checked.append(device.id)
+        if device.id == "door-1":
+            raise RuntimeError("boom")
+        real_check(session, device)
+
+    monkeypatch.setattr(alerts, "check_device", flaky)
+    checker.check_all()
+    assert sorted(checked) == ["door-1", "fridge-1", "walker-1"]
+
+
+def _email_only(monkeypatch):
+    from app import config, notify
+
+    monkeypatch.setattr(config, "SMTP_USER", "stillhere@example.com")
+    monkeypatch.setattr(config, "SMTP_PASSWORD", "app-password")
+    monkeypatch.setattr(config, "ALERT_EMAILS", ["family@example.com"])
+    emails = []
+    monkeypatch.setattr(
+        notify, "send_email", lambda subject, body: emails.append((subject, body)) or "email"
+    )
+    return emails
+
+
+def test_alerts_fall_back_to_email_without_sms_provider(client, monkeypatch):
+    emails = _email_only(monkeypatch)
+    client.post("/api/contacts", json={"name": "Sam", "phone": "+14045550123"})
+    _event(client, {"type": "reply", "value": "help"})
+    assert _fridge(client)["active_alert"]["sms_sent"] is True
+    assert emails and emails[0][0] == "URGENT: StillHere alert"
+
+
+def test_alerts_fall_back_to_email_when_texts_fail(client, monkeypatch):
+    from app import config, notify
+
+    emails = _email_only(monkeypatch)
+    monkeypatch.setattr(config, "SIMPLETEXTING_API_KEY", "test-key")
+
+    def fail(to, body):
+        raise notify.SmsError("SimpleTexting error 403: API access not enabled")
+
+    monkeypatch.setattr(notify, "send_sms", fail)
+    contact = client.post("/api/contacts", json={"name": "Sam", "phone": "+14045550123"}).json()
+    _event(client, {"type": "reply", "value": "help"})
+    assert len(emails) == 1
+    assert client.post(f"/api/contacts/{contact['id']}/test").json() == {
+        "ok": True,
+        "channel": "email",
+    }
+
+
+def _fake_urlopen(monkeypatch, reply: bytes):
+    from app import notify
+
+    sent = {}
+
+    class FakeResponse:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+        def read(self):
+            return reply
+
+    def fake(request, timeout):
+        sent["url"] = request.full_url
+        sent["data"] = request.data
+        return FakeResponse()
+
+    monkeypatch.setattr(notify.urllib.request, "urlopen", fake)
+    return sent
+
+
+def test_textbelt_request_and_error(monkeypatch):
+    from urllib.parse import parse_qs
+
+    from app import config, notify
+
+    monkeypatch.setattr(config, "TEXTBELT_API_KEY", "tb-key")
+    sent = _fake_urlopen(monkeypatch, b'{"success": true, "textId": "1", "quotaRemaining": 9}')
+    assert notify.send_sms("+14045550123", "hello") == "sms"
+    assert sent["url"] == config.TEXTBELT_API_URL
+    assert parse_qs(sent["data"].decode()) == {
+        "phone": ["+14045550123"],
+        "message": ["hello"],
+        "key": ["tb-key"],
+    }
+
+    _fake_urlopen(monkeypatch, b'{"success": false, "error": "Out of quota"}')
+    with pytest.raises(notify.SmsError, match="Out of quota"):
+        notify.send_sms("+14045550123", "hello")
