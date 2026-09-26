@@ -162,7 +162,8 @@ Response: `{"server_now": timestamp, "device": Device}`
 ### `POST /api/alerts/{id}/resolve`
 
 Family marks an alert as handled ("I called, she's fine"). Sets `resolved_by: "family"` and
-returns the device to `ok` if nothing else is active. No body.
+returns the device to `ok` if nothing else is active. The check-in also counts as activity: it
+adds a `motion` event and sets `last_motion_at`, restarting the inactivity countdown. No body.
 
 Response: `{"ok": true}`
 
@@ -300,3 +301,4 @@ Wording lives in `backend/app/messages.py`. These are examples, not a fixed form
 - Add accounts and roles: `POST /api/auth/login`, `GET /api/auth/me`, optional bearer tokens
   on dashboard endpoints, `GET/PATCH /api/residents`, and `resident_id` on Device.
 - Add the community housing grid: `GET/PATCH /api/community`.
+- `POST /api/alerts/{id}/resolve` also records the check-in as a `motion` event.
