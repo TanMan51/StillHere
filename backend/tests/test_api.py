@@ -379,6 +379,22 @@ def test_textbelt_request_and_error(monkeypatch):
         notify.send_sms("+14045550123", "hello")
 
 
+def test_textbelt_text_has_no_link_lookalikes(monkeypatch):
+    from urllib.parse import parse_qs
+
+    from app import config, messages, notify
+
+    monkeypatch.setattr(config, "TEXTBELT_API_KEY", "tb-key")
+    sent = _fake_urlopen(monkeypatch, b'{"success": true, "textId": "1", "quotaRemaining": 9}')
+    notify.send_sms("+14045550123", messages.test_message("VB"))
+    assert parse_qs(sent["data"].decode())["message"] == [
+        "StillHere: Hi VB, this is a test; you'll get alerts at this number."
+    ]
+    assert notify.textbelt_text("Level 3.7 at 8:30 AM. AM check. I'm ok.") == (
+        "Level 3.7 at 8:30 AM; AM check; I'm ok."
+    )
+
+
 def test_resend_email_request(monkeypatch):
     import json
 

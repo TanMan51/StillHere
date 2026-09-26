@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import smtplib
 import urllib.error
 import urllib.parse
@@ -25,6 +26,10 @@ log = logging.getLogger("stillhere.notify")
 
 # Some providers sit behind bot filters that reject urllib's default User-Agent.
 USER_AGENT = "StillHere/1.0"
+
+# A period and the space after it. When the next word is capitalized like "You'll", its first
+# letter is captured so it can be lowercased; words like "AM" or "I'm" are left as they are.
+SENTENCE_BREAK = re.compile(r"\.\s+(\w)(?=[a-z])|\.\s+(?=\w)")
 
 
 class SmsError(Exception):
@@ -163,9 +168,18 @@ def _send_simpletexting(to: str, body: str) -> None:
     log.info("sms to %s sent via SimpleTexting: %s", to, result[:200])
 
 
+def textbelt_text(body: str) -> str:
+    """Join sentences with semicolons: "a test. You'll get" -> "a test; you'll get".
+
+    Unverified Textbelt keys refuse anything that looks like a link, and Textbelt reads a
+    sentence break like "test. You'll" as the address "test.you" (.you is a real domain).
+    """
+    return SENTENCE_BREAK.sub(lambda m: "; " + (m.group(1) or "").lower(), body)
+
+
 def _send_textbelt(to: str, body: str) -> None:
     data = urllib.parse.urlencode(
-        {"phone": to, "message": body, "key": config.TEXTBELT_API_KEY}
+        {"phone": to, "message": textbelt_text(body), "key": config.TEXTBELT_API_KEY}
     ).encode()
     request = urllib.request.Request(
         config.TEXTBELT_API_URL, data=data, headers={"User-Agent": USER_AGENT}, method="POST"
