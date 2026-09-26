@@ -3,9 +3,11 @@
 # which serves that build at / so everything lives at one URL.
 
 FROM node:22-slim AS frontend
-WORKDIR /frontend
+# Mirror the repo layout: the dashboard's mock data imports ../../contract/fixtures.
+WORKDIR /app/frontend
 COPY frontend/package.json frontend/package-lock.json ./
 RUN npm ci --no-audit --no-fund
+COPY contract ../contract
 COPY frontend ./
 # The dashboard calls the real API (same origin) instead of its mock data.
 ENV VITE_USE_MOCK=false
@@ -21,7 +23,7 @@ RUN pip install --no-cache-dir -r backend/requirements.txt
 
 COPY backend backend
 COPY contract contract
-COPY --from=frontend /frontend/dist frontend/dist
+COPY --from=frontend /app/frontend/dist frontend/dist
 
 WORKDIR /app/backend
 # One worker only: the check loop runs inside this process.
