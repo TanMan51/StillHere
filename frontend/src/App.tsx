@@ -17,6 +17,7 @@ import type { Device, Status } from "./types";
 import PlacementGuide, { DeviceSetup, SetupPrompt } from "./PlacementGuide";
 import { hasDemoSession, saveDemoSession } from "./Login";
 import LandingPage from "./LandingPage";
+import { useReveal, useSmoothScroll } from "./motion";
 
 const labels: Record<Status, string> = {
   ok: "Activity looks normal",
@@ -609,6 +610,11 @@ export default function App() {
   useEffect(() => {
     if (isLanding) setLoggingOut(false);
   }, [isLanding]);
+  useEffect(() => {
+    window.scrollTo({ top: 0, behavior: "instant" });
+  }, [location.pathname]);
+  useSmoothScroll();
+  useReveal(location.pathname);
   if (useMock && !loggedIn && !isLanding) {
     return (
       <Navigate
@@ -672,24 +678,27 @@ export default function App() {
       <main
         className={location.pathname === "/dashboard" ? "overview-layout" : "application-layout"}
       >
-        <Routes>
-          <Route path="/dashboard" element={<Overview />} />
-          <Route path="/devices/:id" element={<DevicePage />} />
-          <Route path="/contacts" element={<Contacts />} />
-          <Route path="/setup" element={<Setup />} />
-          <Route path="/setup-device" element={<DeviceSetup />} />
-          <Route path="/placement" element={<PlacementGuide />} />
-          <Route path="/demo" element={<DemoPage />} />
-          <Route
-            path="*"
-            element={
-              <>
-                <h1>Page not found</h1>
-                <Link to="/dashboard">Back to overview</Link>
-              </>
-            }
-          />
-        </Routes>
+        {/* Keyed so each page plays the enter transition. */}
+        <div className="route-view" key={location.pathname}>
+          <Routes>
+            <Route path="/dashboard" element={<Overview />} />
+            <Route path="/devices/:id" element={<DevicePage />} />
+            <Route path="/contacts" element={<Contacts />} />
+            <Route path="/setup" element={<Setup />} />
+            <Route path="/setup-device" element={<DeviceSetup />} />
+            <Route path="/placement" element={<PlacementGuide />} />
+            <Route path="/demo" element={<DemoPage />} />
+            <Route
+              path="*"
+              element={
+                <>
+                  <h1>Page not found</h1>
+                  <Link to="/dashboard">Back to overview</Link>
+                </>
+              }
+            />
+          </Routes>
+        </div>
       </main>
       <footer>
         STILLHERE <span>Activity monitoring</span>

@@ -10,6 +10,7 @@
   --muted: #65756d;
   --line: #d5dfd5;
   --panel: #ffffff;
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
 }
 * {
   box-sizing: border-box;
@@ -48,9 +49,10 @@ button {
   letter-spacing: 0.2px;
   cursor: pointer;
   transition:
-    background 0.2s,
-    color 0.2s,
-    transform 0.2s;
+    background 0.35s var(--ease-out),
+    border-color 0.35s var(--ease-out),
+    color 0.35s var(--ease-out),
+    transform 0.35s var(--ease-out);
   min-height: 44px;
 }
 button:hover {
@@ -160,6 +162,8 @@ small,
   overflow: hidden;
 }
 .ice-scene canvas {
+  /* Positioned so it stacks above the heartbeat trace, which sits behind the sensor. */
+  position: relative;
   width: 100%;
   height: 100%;
   opacity: 0;
@@ -437,8 +441,9 @@ main {
   display: flex;
   flex-direction: column;
   transition:
-    background 0.2s,
-    transform 0.2s;
+    background 0.5s var(--ease-out),
+    box-shadow 0.5s var(--ease-out),
+    transform 0.5s var(--ease-out);
   min-width: 0;
 }
 .device-card h2 {
@@ -1023,9 +1028,188 @@ footer {
     letter-spacing: -1px;
   }
 }
+/* Heartbeat trace behind the sensor and the landing sections (Heartbeat.tsx). */
+.heartbeat {
+  position: absolute;
+  left: 0;
+  top: calc(56% - 110px);
+  width: 100%;
+  height: 180px;
+  overflow: visible;
+}
+.heartbeat path {
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+.heartbeat-trace {
+  stroke: #2e6b57;
+  stroke-width: 1.2;
+  opacity: 0.12;
+}
+.heartbeat-pulse {
+  stroke: #2e8b62;
+  stroke-width: 2;
+  opacity: 0.45;
+  stroke-dasharray: 70 930;
+  animation: heartbeat-sweep 5s linear infinite;
+  filter: drop-shadow(0 0 4px #2e8b6266);
+}
+@keyframes heartbeat-sweep {
+  from {
+    stroke-dashoffset: 1000;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+.ice-scene canvas,
+.ice-scene .scene-labels,
+.ice-scene .scene-fallback {
+  transition: opacity 0.5s var(--ease-out);
+}
+/* Once the hero scrolls away the sensor steps back; the heartbeat keeps running behind the
+   see-through sections. */
+.scene-offstage canvas,
+.scene-offstage .scene-labels,
+.scene-offstage .scene-fallback {
+  opacity: 0 !important;
+}
+
+/* Sensor scene overlays: part labels, the click hint, and a keyboard toggle. */
+.scene-labels {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.scene-part,
+.scene-hint {
+  position: absolute;
+  left: 0;
+  top: 0;
+  white-space: nowrap;
+  font-size: 10px;
+  letter-spacing: 0.3px;
+  color: #244b3e;
+  will-change: transform, opacity;
+}
+.scene-part {
+  opacity: 0;
+}
+.scene-part::before {
+  content: "";
+  position: absolute;
+  width: 5px;
+  height: 5px;
+  margin: -2.5px 0 0 -2.5px;
+  border-radius: 50%;
+  background: #244b3e;
+}
+.scene-part-line {
+  position: absolute;
+  height: 1px;
+  background: #244b3e80;
+  transform-origin: 0 0;
+}
+.scene-part-label {
+  position: absolute;
+}
+.scene-part-label small {
+  display: block;
+  margin-top: 3px;
+  font-size: 11px;
+  letter-spacing: 0;
+  color: #65756d;
+}
+.scene-hint {
+  translate: -50% 0;
+  color: #65756d;
+}
+.landing-scene-label {
+  transition: opacity 0.4s var(--ease-out);
+}
+[data-sensor-apart] .landing-scene-label {
+  opacity: 0;
+}
+@media (max-width: 650px) {
+  .scene-part {
+    font-size: 8px;
+  }
+  .scene-part-label small {
+    display: none;
+  }
+}
+.scene-toggle {
+  position: fixed;
+  left: 50%;
+  bottom: 24px;
+  z-index: 5;
+  translate: -50% 0;
+}
+.scene-toggle:not(:focus-visible) {
+  clip-path: inset(50%);
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+}
+
+/* Motion: page enters, scroll reveals, and the login dialog. See motion.ts. */
+.route-view {
+  animation: page-in 0.8s var(--ease-out);
+}
+/* Opacity only: a transform or filter here would detach the fixed header and scene. */
+.landing-shell {
+  animation: fade-in 1.2s var(--ease-out);
+}
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes page-in {
+  from {
+    opacity: 0;
+    translate: 0 14px;
+    filter: blur(6px);
+  }
+}
+.reveal {
+  opacity: 0;
+  translate: 0 28px;
+  transition:
+    opacity 0.9s var(--ease-out) var(--reveal-delay, 0ms),
+    translate 0.9s var(--ease-out) var(--reveal-delay, 0ms);
+}
+.reveal.revealed {
+  opacity: 1;
+  translate: 0 0;
+}
+.login-dialog[open] {
+  animation: dialog-in 0.55s var(--ease-out);
+}
+.login-dialog[open]::backdrop {
+  animation: backdrop-in 0.55s var(--ease-out);
+}
+@keyframes dialog-in {
+  from {
+    opacity: 0;
+    scale: 0.96;
+    translate: 0 18px;
+  }
+}
+@keyframes backdrop-in {
+  from {
+    opacity: 0;
+  }
+}
 @media (prefers-reduced-motion: reduce) {
   html {
     scroll-behavior: auto;
+  }
+  .heartbeat-pulse {
+    display: none;
   }
   *,
   *::before,
@@ -1090,11 +1274,19 @@ footer {
   padding: 0;
   margin: 0;
 }
+/* Tall scroll track; the stage stays pinned while the sensor turns and zooms. */
 .landing-hero {
+  height: 420svh;
+  position: relative;
+}
+.landing-hero-stage {
+  position: sticky;
+  top: 0;
   min-height: 720px;
   height: 100svh;
-  position: relative;
   padding: 170px 5% 90px;
+  /* Hero copy steps aside once the camera starts moving in. */
+  opacity: var(--hero-copy, 1);
 }
 .landing-heading {
   position: relative;
@@ -1152,25 +1344,44 @@ footer {
 }
 .landing-section {
   position: relative;
-  background: #f7f8f3;
+  /* See-through so the heartbeat trace keeps running behind the page. */
+  background: transparent;
   border-top: 1px solid #ffffff0d;
+  /* One centered column: the section label sits above its heading. */
   display: grid;
-  grid-template-columns: 1fr 3fr;
-  gap: 50px;
-  padding: 100px max(5%, calc((100vw - 1300px) / 2));
+  justify-items: center;
+  gap: 18px;
+  text-align: center;
+  padding: 100px max(5%, calc((100vw - 1100px) / 2));
   scroll-margin-top: 98px;
 }
 .landing-section:nth-child(odd) {
-  background: #edf2e8;
+  background: #e3ebdd80;
 }
 .landing-section-body {
-  max-width: 950px;
+  width: 100%;
+  max-width: 1000px;
   min-width: 0;
+}
+/* Centered text reads best in a narrow measure; the halo keeps the heartbeat trace from
+   running through the letters. */
+.landing-section .landing-section-body > p {
+  max-width: 600px;
+  margin-inline: auto;
+  text-wrap: balance;
+  text-shadow:
+    0 0 6px #f7f8f3,
+    0 0 12px #f7f8f3;
+}
+.landing-steps article,
+.use-cases article {
+  text-align: left;
 }
 .landing-section h2 {
   font-size: clamp(30px, 3.5vw, 48px);
   letter-spacing: -1.5px;
   margin-bottom: 30px;
+  text-wrap: balance;
 }
 .landing-section p {
   font-size: 14px;
@@ -1183,7 +1394,9 @@ footer {
   font-size: clamp(22px, 2.5vw, 30px);
   color: #253e36;
   line-height: 1.45;
-  margin-bottom: 24px;
+  max-width: 680px;
+  margin-bottom: 32px;
+  text-wrap: balance;
 }
 .landing-steps {
   display: grid;
@@ -1216,21 +1429,35 @@ footer {
   padding: 16px 0;
   border-bottom: 1px solid #839aaa;
 }
-.landing-faq details {
+.use-cases {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 28px;
+}
+.use-cases article {
   border: 1px solid var(--line);
-  border-radius: 18px;
-  padding: 22px 24px;
-  margin-bottom: 12px;
+  border-radius: 22px;
+  padding: 16px 16px 24px;
   background: #ffffff50;
 }
-.landing-faq summary {
-  cursor: pointer;
-  font-size: 14px;
-  line-height: 1.6;
+.use-cases svg {
+  display: block;
+  width: 100%;
+  height: auto;
 }
-.landing-faq details p {
+.use-cases h3 {
+  font-size: 20px;
+  letter-spacing: -0.4px;
+  margin: 20px 8px 8px;
+}
+.use-cases p {
   font-size: 14px;
-  margin-top: 20px;
+  margin: 0 8px;
+}
+.use-cases-avoid {
+  font-size: 13px;
+  color: var(--muted);
+  margin-top: 28px;
 }
 .landing-footer {
   background: #f7f8f3;
@@ -1275,7 +1502,6 @@ footer {
 }
 @media (max-width: 900px) {
   .landing-section {
-    grid-template-columns: 1fr;
     gap: 15px;
     padding: 65px 6%;
   }
@@ -1315,9 +1541,8 @@ footer {
     min-height: 40px;
     font-size: 10px;
   }
-  .landing-hero {
+  .landing-hero-stage {
     min-height: 700px;
-    height: 100svh;
     padding: 160px 20px 70px;
   }
   .landing-heading h1 {
@@ -1341,7 +1566,8 @@ footer {
     bottom: 55px;
     font-size: 8px;
   }
-  .landing-steps {
+  .landing-steps,
+  .use-cases {
     grid-template-columns: 1fr;
     gap: 28px;
   }
