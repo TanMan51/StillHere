@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Literal
+
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlmodel import Session, select
@@ -39,6 +41,8 @@ def get_device(device_id: str, session: Session = Depends(get_session)):
 class DevicePatch(BaseModel):
     name: str | None = Field(default=None, min_length=1)
     limit_minutes: int | None = Field(default=None, ge=60, le=2880)
+    sound_enabled: bool | None = None
+    motion_sensitivity: Literal["low", "medium", "high"] | None = None
 
 
 @router.patch("/devices/{device_id}")
@@ -48,6 +52,10 @@ def patch_device(device_id: str, body: DevicePatch, session: Session = Depends(g
         device.name = body.name
     if body.limit_minutes is not None:
         device.limit_minutes = body.limit_minutes
+    if body.sound_enabled is not None:
+        device.sound_enabled = body.sound_enabled
+    if body.motion_sensitivity is not None:
+        device.motion_sensitivity = body.motion_sensitivity
     session.add(device)
     session.commit()
     session.refresh(device)

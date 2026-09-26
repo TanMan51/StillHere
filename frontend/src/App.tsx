@@ -24,7 +24,7 @@ import { QRCodeSVG } from "qrcode.react";
 import { localHour, todayByHour } from "./activity";
 import { api, useMock } from "./api";
 import { usePoll, useTick } from "./hooks";
-import type { Device, Status } from "./types";
+import type { Device, MotionSensitivity, Status } from "./types";
 import PlacementGuide, { DeviceSetup, SetupPrompt } from "./PlacementGuide";
 import { hasDemoSession, saveDemoSession } from "./Login";
 import LandingPage from "./LandingPage";
@@ -441,10 +441,17 @@ function DevicePage() {
 // The API accepts a fixed check-in limit of 1 to 48 hours (contract: 60-2880 minutes).
 const MIN_LIMIT = 60;
 const MAX_LIMIT = 2880;
+const sensitivities: { value: MotionSensitivity; label: string }[] = [
+  { value: "low", label: "Low: only firm movement" },
+  { value: "medium", label: "Medium: everyday use, like opening a door" },
+  { value: "high", label: "High: the lightest touch" },
+];
 function Settings({ device, onDone }: { device: Device; onDone: () => void }) {
   const [name, setName] = useState(device.name);
   const [hours, setHours] = useState(String(Math.floor(device.limit_minutes / 60)));
   const [minutes, setMinutes] = useState(String(device.limit_minutes % 60));
+  const [soundEnabled, setSoundEnabled] = useState(device.sound_enabled);
+  const [sensitivity, setSensitivity] = useState(device.motion_sensitivity);
   const limit = Number(hours || 0) * 60 + Number(minutes || 0);
   return (
     <section className="panel">
@@ -481,6 +488,34 @@ function Settings({ device, onDone }: { device: Device; onDone: () => void }) {
       <p className="muted">
         Between 1 and 48 hours. A learned routine may suggest a check-in sooner.
       </p>
+      <label className="toggle">
+        <input
+          type="checkbox"
+          checked={soundEnabled}
+          onChange={(e) => setSoundEnabled(e.target.checked)}
+        />
+        Listen for loud sounds
+      </label>
+      <p className="muted">
+        When on, a loud sound makes the sensor ask &ldquo;Are you okay?&rdquo;. Falls are always
+        checked.
+      </p>
+      <label>
+        Accelerometer sensitivity
+        <select
+          value={sensitivity}
+          onChange={(e) => setSensitivity(e.target.value as MotionSensitivity)}
+        >
+          {sensitivities.map((s) => (
+            <option key={s.value} value={s.value}>
+              {s.label}
+            </option>
+          ))}
+        </select>
+      </label>
+      <p className="muted">
+        How much movement counts as activity. The sensor updates within an hour.
+      </p>
       <Action
         run={() => {
           if (!name.trim()) return Promise.reject(new Error("Enter a device name"));
@@ -492,6 +527,8 @@ function Settings({ device, onDone }: { device: Device; onDone: () => void }) {
           return api.updateDevice(device.id, {
             name: name.trim(),
             limit_minutes: limit,
+            sound_enabled: soundEnabled,
+            motion_sensitivity: sensitivity,
           });
         }}
         onDone={onDone}

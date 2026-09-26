@@ -54,6 +54,13 @@ def device_baseline(session: Session, device: Device) -> routine.Baseline:
     return routine.compute_baseline([clock.as_utc(t) for t in times], now, config.HOUSEHOLD_TZ)
 
 
+def device_settings(device: Device) -> dict:
+    return {
+        "sound_enabled": device.sound_enabled,
+        "motion_sensitivity": device.motion_sensitivity,
+    }
+
+
 def device_dict(session: Session, device: Device, baseline: routine.Baseline | None = None) -> dict:
     now = clock.now()
     baseline = baseline or device_baseline(session, device)
@@ -83,6 +90,7 @@ def device_dict(session: Session, device: Device, baseline: routine.Baseline | N
         "seconds_until_alert": seconds_until,
         "routine_note": verdict.note if baseline.ready else None,
         "active_alert": alert_dict(alert) if alert else None,
+        **device_settings(device),
     }
 
 

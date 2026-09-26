@@ -1,20 +1,10 @@
 export type Status =
-  | "ok"
-  | "inactive_alert"
-  | "urgent"
-  | "awaiting_reply"
-  | "offline"
-  | "no_reply_alert";
+  "ok" | "inactive_alert" | "urgent" | "awaiting_reply" | "offline" | "no_reply_alert";
+export type MotionSensitivity = "low" | "medium" | "high";
 export interface Alert {
   id: number;
   device_id: string;
-  kind:
-    | "inactivity"
-    | "urgent"
-    | "no_reply"
-    | "false_alarm"
-    | "offline"
-    | "all_clear";
+  kind: "inactivity" | "urgent" | "no_reply" | "false_alarm" | "offline" | "all_clear";
   message: string;
   sms_sent: boolean;
   sent_at: string;
@@ -35,6 +25,8 @@ export interface Device {
   seconds_until_alert: number | null;
   routine_note: string | null;
   active_alert: Alert | null;
+  sound_enabled: boolean;
+  motion_sensitivity: MotionSensitivity;
 }
 export interface MotionEvent {
   id: number;

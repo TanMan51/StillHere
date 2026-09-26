@@ -162,6 +162,15 @@ textarea {
 .duration input {
   width: 96px;
 }
+.toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 19px;
+}
+.toggle input {
+  width: auto;
+}
 h1,
 h2,
 h3 {

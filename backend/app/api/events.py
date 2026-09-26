@@ -11,6 +11,7 @@ from sqlmodel import Session
 from .. import alerts, clock, config
 from ..db import get_session
 from ..models import Device, Event
+from ..serialize import device_settings
 
 router = APIRouter()
 
@@ -49,4 +50,4 @@ def post_event(
     alerts.handle_event(session, device, event)
     session.add(device)
     session.commit()
-    return {"ok": True}
+    return {"ok": True, "settings": device_settings(device)}

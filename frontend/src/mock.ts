@@ -14,10 +14,7 @@ let demo: Demo = {
   clock_started_at: null,
   server_now: deviceFixture.server_now,
 };
-const now = () =>
-  new Date(
-    clockAnchor + (Date.now() - realAnchor) * demo.time_scale,
-  ).toISOString();
+const now = () => new Date(clockAnchor + (Date.now() - realAnchor) * demo.time_scale).toISOString();
 const emptyBaseline = (): Baseline => ({
   ready: false,
   days_of_data: 0,
@@ -25,25 +22,16 @@ const emptyBaseline = (): Baseline => ({
   hourly_activity: Array(24).fill(0),
   hourly_threshold_minutes: Array(24).fill(0),
 });
-const devices: DeviceDetail[] = (
-  structuredClone(deviceFixture.devices) as Device[]
-).map((d) => ({
+const devices: DeviceDetail[] = (structuredClone(deviceFixture.devices) as Device[]).map((d) => ({
   ...d,
   events: [],
   alerts: d.active_alert ? [d.active_alert] : [],
   baseline: emptyBaseline(),
 }));
-const detailIndex = devices.findIndex(
-  (device) => device.id === detailFixture.device.id,
-);
-if (detailIndex >= 0)
-  devices[detailIndex] = structuredClone(detailFixture.device) as DeviceDetail;
+const detailIndex = devices.findIndex((device) => device.id === detailFixture.device.id);
+if (detailIndex >= 0) devices[detailIndex] = structuredClone(detailFixture.device) as DeviceDetail;
 
-export async function mockRequest(
-  path: string,
-  method: string,
-  raw?: unknown,
-): Promise<unknown> {
+export async function mockRequest(path: string, method: string, raw?: unknown): Promise<unknown> {
   const body = (raw ?? {}) as Record<string, unknown>;
   const parts = path.split("/").filter(Boolean);
   const server_now = now();
@@ -53,9 +41,7 @@ export async function mockRequest(
       ? Math.max(
           0,
           Math.ceil(
-            (Date.parse(d.next_alert_at) - Date.parse(server_now)) /
-              1000 /
-              demo.time_scale,
+            (Date.parse(d.next_alert_at) - Date.parse(server_now)) / 1000 / demo.time_scale,
           ),
         )
       : null;
@@ -66,8 +52,14 @@ export async function mockRequest(
     if (!device) throw new Error("Device not found");
     if (method === "PATCH") {
       if (typeof body.name === "string") device.name = body.name;
-      if (typeof body.limit_minutes === "number")
-        device.limit_minutes = body.limit_minutes;
+      if (typeof body.limit_minutes === "number") device.limit_minutes = body.limit_minutes;
+      if (typeof body.sound_enabled === "boolean") device.sound_enabled = body.sound_enabled;
+      if (
+        body.motion_sensitivity === "low" ||
+        body.motion_sensitivity === "medium" ||
+        body.motion_sensitivity === "high"
+      )
+        device.motion_sensitivity = body.motion_sensitivity;
     }
     return response({ server_now, device });
   }
@@ -99,22 +91,17 @@ export async function mockRequest(
     contacts = contacts.filter((c) => c.id !== Number(parts[1]));
     return;
   }
-  if (parts[0] === "contacts" && parts[2] === "test")
-    return { ok: true, channel: "sms" };
+  if (parts[0] === "contacts" && parts[2] === "test") return { ok: true, channel: "sms" };
   if (path === "/demo") {
     if (method === "POST") {
       clockAnchor = Date.parse(
-        typeof body.start_clock_at === "string"
-          ? body.start_clock_at
-          : server_now,
+        typeof body.start_clock_at === "string" ? body.start_clock_at : server_now,
       );
       realAnchor = Date.now();
       demo = {
         enabled: Boolean(body.enabled),
         time_scale: body.enabled ? Number(body.time_scale ?? 1440) : 1,
-        clock_started_at: body.enabled
-          ? new Date(clockAnchor).toISOString()
-          : null,
+        clock_started_at: body.enabled ? new Date(clockAnchor).toISOString() : null,
         server_now: now(),
       };
     }
@@ -132,9 +119,7 @@ export async function mockRequest(
       type: "motion" as const,
       value: null,
       level: 1.5,
-      ts: new Date(
-        Date.parse(server_now) - (i + 1) * 4 * 3600000,
-      ).toISOString(),
+      ts: new Date(Date.parse(server_now) - (i + 1) * 4 * 3600000).toISOString(),
     }));
     device.last_motion_at = device.events[0].ts;
     return { ok: true, events_created: 42 };

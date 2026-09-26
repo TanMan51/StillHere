@@ -23,6 +23,8 @@
       "resolved_at": null,
       "resolved_by": null
     },
+    "sound_enabled": true,
+    "motion_sensitivity": "medium",
     "events": [
       {
         "id": 5012,

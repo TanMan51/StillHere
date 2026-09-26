@@ -22,7 +22,10 @@ def client():
         c.post("/api/demo", json={"enabled": False})
         c.post("/api/demo/reset")
         for device_id in ("fridge-1", "walker-1", "door-1"):
-            c.patch(f"/api/devices/{device_id}", json={"limit_minutes": 720})
+            c.patch(
+                f"/api/devices/{device_id}",
+                json={"limit_minutes": 720, "sound_enabled": True, "motion_sensitivity": "medium"},
+            )
         for contact in c.get("/api/contacts").json():
             c.delete(f"/api/contacts/{contact['id']}")
         yield c
@@ -84,6 +87,27 @@ def test_patch_device_validates_limit(client):
     assert ok.status_code == 200 and ok.json()["device"]["limit_minutes"] == 360
     assert client.patch("/api/devices/fridge-1", json={"limit_minutes": 5}).status_code == 422
     assert client.patch("/api/devices/nope", json={"name": "x"}).status_code == 404
+
+
+def test_patch_device_sensor_settings(client):
+    ok = client.patch(
+        "/api/devices/fridge-1", json={"sound_enabled": False, "motion_sensitivity": "high"}
+    )
+    assert ok.status_code == 200
+    assert ok.json()["device"]["sound_enabled"] is False
+    assert ok.json()["device"]["motion_sensitivity"] == "high"
+    bad = client.patch("/api/devices/fridge-1", json={"motion_sensitivity": "extreme"})
+    assert bad.status_code == 422
+
+
+def test_event_response_carries_device_settings(client):
+    client.patch("/api/devices/fridge-1", json={"motion_sensitivity": "low"})
+    body = {"device_id": "fridge-1", "type": "heartbeat"}
+    res = client.post("/api/events", json=body, headers=TOKEN)
+    assert res.json() == {
+        "ok": True,
+        "settings": {"sound_enabled": True, "motion_sensitivity": "low"},
+    }
 
 
 def test_contacts_crud(client):
@@ -221,6 +245,16 @@ def test_loud_then_ok_button_is_false_alarm(client):
     assert device["status"] == "ok"
     assert device["alerts"][0]["kind"] == "false_alarm"
     assert device["alerts"][0]["sms_sent"] is False
+
+
+def test_loud_ignored_when_sound_disabled(client):
+    client.patch("/api/devices/fridge-1", json={"sound_enabled": False})
+    _event(client, {"type": "loud", "level": 2400})
+    device = _fridge(client)
+    assert device["status"] == "ok"
+    assert device["events"][0]["type"] == "loud"  # still recorded
+    _event(client, {"type": "fall", "level": 9})
+    assert _fridge(client)["status"] == "awaiting_reply"  # falls always count
 
 
 def test_loud_then_help_is_urgent(client):

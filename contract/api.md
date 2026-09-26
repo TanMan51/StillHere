@@ -51,6 +51,8 @@ software people look at it, and it gets a line in the changelog at the bottom.
 
 **Device `object_type`:** `fridge`, `walker`, `door`, `other`
 
+**Device `motion_sensitivity`:** `low`, `medium`, `high`
+
 ---
 
 ## Device endpoint (used by the Pico W)
@@ -72,7 +74,12 @@ stamps each event when it arrives.
 Heartbeat: send `{"device_id": "...", "type": "heartbeat"}` every hour in normal mode,
 every 30 s in demo mode.
 
-Response `202`: `{"ok": true}`
+Response `202`: `{"ok": true, "settings": {"sound_enabled": boolean, "motion_sensitivity": string}}`
+
+The device applies `settings` after every post (heartbeats included), so changes from the
+dashboard reach it within one heartbeat. With `sound_enabled` false it stops listening for loud
+sounds; `motion_sensitivity` picks its accelerometer jolt threshold (`high` reacts to the
+smallest jolts). Falls are always reported.
 
 Example bodies: `fixtures/event_examples.json`
 
@@ -86,21 +93,23 @@ Response: `{"server_now": timestamp, "devices": [Device]}` (see `fixtures/device
 
 **Device object**
 
-| Field                 | Type              | Notes                                                                                                             |
-| --------------------- | ----------------- | ----------------------------------------------------------------------------------------------------------------- |
-| `id`                  | string            | e.g. `"fridge-1"`                                                                                                 |
-| `name`                | string            | e.g. `"Mom's fridge"`                                                                                             |
-| `object_type`         | object type       |                                                                                                                   |
-| `status`              | status            |                                                                                                                   |
-| `status_since`        | timestamp         | When the current status began.                                                                                    |
-| `online`              | boolean           | False when no heartbeat for 2 hours.                                                                              |
-| `last_motion_at`      | timestamp or null |                                                                                                                   |
-| `last_heartbeat_at`   | timestamp or null |                                                                                                                   |
-| `limit_minutes`       | integer           | Fixed inactivity limit (the hard ceiling).                                                                        |
-| `next_alert_at`       | timestamp or null | When an inactivity alert will fire if nothing moves. Null while an alert is active or the device is offline.      |
-| `seconds_until_alert` | integer or null   | **Real** seconds until `next_alert_at`. Use this for the countdown and tick it down locally between polls.        |
-| `routine_note`        | string or null    | Ready-to-display sentence from the learned routine. Null when there's nothing to say or the baseline isn't ready. |
-| `active_alert`        | Alert or null     | The currently unresolved alert, if any.                                                                           |
+| Field                 | Type               | Notes                                                                                                             |
+| --------------------- | ------------------ | ----------------------------------------------------------------------------------------------------------------- |
+| `id`                  | string             | e.g. `"fridge-1"`                                                                                                 |
+| `name`                | string             | e.g. `"Mom's fridge"`                                                                                             |
+| `object_type`         | object type        |                                                                                                                   |
+| `status`              | status             |                                                                                                                   |
+| `status_since`        | timestamp          | When the current status began.                                                                                    |
+| `online`              | boolean            | False when no heartbeat for 2 hours.                                                                              |
+| `last_motion_at`      | timestamp or null  |                                                                                                                   |
+| `last_heartbeat_at`   | timestamp or null  |                                                                                                                   |
+| `limit_minutes`       | integer            | Fixed inactivity limit (the hard ceiling).                                                                        |
+| `next_alert_at`       | timestamp or null  | When an inactivity alert will fire if nothing moves. Null while an alert is active or the device is offline.      |
+| `seconds_until_alert` | integer or null    | **Real** seconds until `next_alert_at`. Use this for the countdown and tick it down locally between polls.        |
+| `routine_note`        | string or null     | Ready-to-display sentence from the learned routine. Null when there's nothing to say or the baseline isn't ready. |
+| `active_alert`        | Alert or null      | The currently unresolved alert, if any.                                                                           |
+| `sound_enabled`       | boolean            | Whether loud sounds start an "Are you okay?" check. Default `true`. `loud` events are ignored while false.        |
+| `motion_sensitivity`  | motion sensitivity | Accelerometer sensitivity the device should use. Default `"medium"`.                                              |
 
 ### `GET /api/devices/{id}`
 
@@ -141,7 +150,8 @@ DeviceDetail is the Device object plus:
 
 ### `PATCH /api/devices/{id}`
 
-Body (all optional): `{"name": string, "limit_minutes": integer 60–2880}`
+Body (all optional): `{"name": string, "limit_minutes": integer 60–2880, "sound_enabled": boolean,
+"motion_sensitivity": motion sensitivity}`
 
 Response: `{"server_now": timestamp, "device": Device}`
 
@@ -213,3 +223,5 @@ Wording lives in `backend/app/messages.py`. These are examples, not a fixed form
 ## Changelog
 
 - v1: initial contract.
+- Add `sound_enabled` and `motion_sensitivity` to Device, `PATCH /api/devices/{id}`, and the
+  `POST /api/events` response.

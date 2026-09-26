@@ -4,27 +4,18 @@ import type {
   DetailResponse,
   Device,
   DevicesResponse,
+  MotionSensitivity,
 } from "./types";
 // Production uses the same-origin backend; local development defaults to fixtures.
 // An explicit flag overrides the default. Never fall back to fixtures on API errors.
 export const useMock =
   import.meta.env.VITE_USE_MOCK === "true" ||
   (import.meta.env.VITE_USE_MOCK !== "false" && !import.meta.env.PROD);
-async function request<T>(
-  path: string,
-  method = "GET",
-  body?: unknown,
-): Promise<T> {
-  if (useMock)
-    return (await import("./mock")).mockRequest(
-      path,
-      method,
-      body,
-    ) as Promise<T>;
+async function request<T>(path: string, method = "GET", body?: unknown): Promise<T> {
+  if (useMock) return (await import("./mock")).mockRequest(path, method, body) as Promise<T>;
   const response = await fetch(`/api${path}`, {
     method,
-    headers:
-      body === undefined ? undefined : { "Content-Type": "application/json" },
+    headers: body === undefined ? undefined : { "Content-Type": "application/json" },
     body: body === undefined ? undefined : JSON.stringify(body),
     signal: AbortSignal.timeout(10000),
   });
@@ -43,31 +34,31 @@ async function request<T>(
 }
 export const api = {
   devices: () => request<DevicesResponse>("/devices"),
-  device: (id: string) =>
-    request<DetailResponse>(`/devices/${encodeURIComponent(id)}`),
-  updateDevice: (id: string, body: { name?: string; limit_minutes?: number }) =>
+  device: (id: string) => request<DetailResponse>(`/devices/${encodeURIComponent(id)}`),
+  updateDevice: (
+    id: string,
+    body: {
+      name?: string;
+      limit_minutes?: number;
+      sound_enabled?: boolean;
+      motion_sensitivity?: MotionSensitivity;
+    },
+  ) =>
     request<{ server_now: string; device: Device }>(
       `/devices/${encodeURIComponent(id)}`,
       "PATCH",
       body,
     ),
-  resolve: (id: number) =>
-    request<{ ok: boolean }>(`/alerts/${id}/resolve`, "POST"),
+  resolve: (id: number) => request<{ ok: boolean }>(`/alerts/${id}/resolve`, "POST"),
   contacts: () => request<Contact[]>("/contacts"),
   addContact: (body: { name: string; phone: string }) =>
     request<Contact>("/contacts", "POST", body),
   deleteContact: (id: number) => request<void>(`/contacts/${id}`, "DELETE"),
   testContact: (id: number) =>
-    request<{ ok: boolean; channel: "sms" | "email" }>(
-      `/contacts/${id}/test`,
-      "POST",
-    ),
+    request<{ ok: boolean; channel: "sms" | "email" }>(`/contacts/${id}/test`, "POST"),
   demo: () => request<Demo>("/demo"),
-  setDemo: (body: {
-    enabled: boolean;
-    time_scale?: number;
-    start_clock_at?: string;
-  }) => request<Demo>("/demo", "POST", body),
+  setDemo: (body: { enabled: boolean; time_scale?: number; start_clock_at?: string }) =>
+    request<Demo>("/demo", "POST", body),
   seed: (device_id: string) =>
     request<{ ok: boolean; events_created: number }>("/demo/seed", "POST", {
       device_id,

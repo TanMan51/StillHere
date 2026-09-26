@@ -16,6 +16,8 @@ class Device(SQLModel, table=True):
     status_since: datetime
     last_motion_at: datetime | None = None
     last_heartbeat_at: datetime | None = None
+    sound_enabled: bool = True
+    motion_sensitivity: str = "medium"
     # Internal, real-time bookkeeping (not in the contract).
     last_seen_real_at: datetime | None = None
     reply_deadline_real: datetime | None = None

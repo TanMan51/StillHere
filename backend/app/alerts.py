@@ -108,6 +108,8 @@ def handle_event(session: Session, device: Device, event: Event) -> None:
                 session, device, "all_clear", messages.all_clear(device.name), "motion", True
             )
             set_status(device, "ok")
+    elif event.type == "loud" and not device.sound_enabled:
+        return
     elif event.type in ("loud", "fall"):
         if device.status in REPLY_FLOW_STARTS_FROM:
             device.reply_deadline_real = clock.real_now() + config.REPLY_WINDOW
