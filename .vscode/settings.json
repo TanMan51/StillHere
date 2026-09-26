@@ -1,0 +1,13 @@
+{
+  "editor.formatOnSave": true,
+  "files.eol": "\n",
+  "files.insertFinalNewline": true,
+  "files.trimTrailingWhitespace": true,
+  "[python]": {
+    "editor.defaultFormatter": "charliermarsh.ruff",
+    "editor.codeActionsOnSave": { "source.organizeImports": "explicit" }
+  },
+  "[typescript][typescriptreact][javascript][json][css][markdown]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  }
+}
