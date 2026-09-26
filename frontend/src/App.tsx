@@ -9,8 +9,19 @@ import {
   useNavigate,
   useParams,
 } from "react-router-dom";
-import { Bar, BarChart, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Legend,
+  ReferenceLine,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
 import { QRCodeSVG } from "qrcode.react";
+import { localHour, todayByHour } from "./activity";
 import { api, useMock } from "./api";
 import { usePoll, useTick } from "./hooks";
 import type { Device, Status } from "./types";
@@ -215,6 +226,30 @@ function Overview() {
     </>
   );
 }
+// Long logs start with the newest few entries; the rest are one click away.
+const SHORT_LIST_SIZE = 3;
+function ShortList<T>({ items, children }: { items: T[]; children: (item: T) => ReactNode }) {
+  const [expanded, setExpanded] = useState(false);
+  const shown = expanded ? items : items.slice(0, SHORT_LIST_SIZE);
+  const hidden = items.length - SHORT_LIST_SIZE;
+  return (
+    <>
+      {shown.map(children)}
+      {hidden > 0 && (
+        <button
+          className="secondary show-more"
+          onClick={() => setExpanded((value) => !value)}
+          aria-expanded={expanded}
+        >
+          {expanded ? "Show less" : `Show ${hidden} more`}
+        </button>
+      )}
+    </>
+  );
+}
+function clockHour(hour: number) {
+  return `${hour % 12 || 12} ${hour < 12 ? "AM" : "PM"}`;
+}
 function DevicePage() {
   const { id = "" } = useParams();
   const load = useCallback(() => api.device(id), [id]);
@@ -227,13 +262,18 @@ function DevicePage() {
       </>
     );
   const d = data.device;
-  const hour = Number(
-    new Intl.DateTimeFormat("en-US", {
-      hour: "numeric",
-      hourCycle: "h23",
-      timeZone: d.baseline.timezone,
-    }).format(new Date(data.server_now)),
-  );
+  // Today from 12 AM to 11 PM, each hour beside the typical amount for that hour. The day starts
+  // fresh at local midnight; hours after now stay empty.
+  const today = todayByHour(d.events, data.server_now, d.baseline.timezone);
+  const chartData = today.map((count, hour) => ({
+    hour,
+    recent: count,
+    usual: d.baseline.hourly_activity[hour],
+  }));
+  const nowHour = localHour(data.server_now, d.baseline.timezone);
+  // Until the routine is learned the average is all zeros; hide it so recent bars get the room.
+  const hasUsual = d.baseline.hourly_activity.some((count) => count > 0);
+  const tick = { fontSize: 11, fill: "#65756d" };
   return (
     <>
       <Link className="back" to="/dashboard">
@@ -262,94 +302,150 @@ function DevicePage() {
       </section>
       <div className="detail-grid">
         <section className="panel">
-          <h2>Activity by hour</h2>
+          <h2>Activity today</h2>
           <p className="muted">
             {d.baseline.ready
-              ? `Average activity by hour · ${d.baseline.days_of_data} days observed`
-              : `Learning the routine · ${d.baseline.days_of_data} of 5 days observed`}
+              ? `Each bar is one hour, starting at 12 AM. Light bars show a typical day (${d.baseline.days_of_data} days observed).`
+              : `Each bar is one hour, starting at 12 AM. A typical day appears after 5 days of data (${d.baseline.days_of_data} so far).`}
           </p>
           <div
             className="chart"
             role="img"
-            aria-label={`Hourly activity chart in ${d.baseline.timezone}`}
+            aria-label={`Activity each hour today, in ${d.baseline.timezone}`}
           >
             <ResponsiveContainer width="100%" height="100%">
               <BarChart
-                data={d.baseline.hourly_activity.map((count, h) => ({
-                  hour: h,
-                  count,
-                }))}
+                data={chartData}
+                barGap={1}
+                barCategoryGap="8%"
+                margin={{ top: 22, right: 8, bottom: 0, left: 0 }}
               >
-                <XAxis dataKey="hour" tickFormatter={(h) => `${h}:00`} interval={5} />
-                <YAxis allowDecimals={false} width={28} />
+                <defs>
+                  <linearGradient id="bar-recent" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#2c7a60" />
+                    <stop offset="100%" stopColor="#184e42" />
+                  </linearGradient>
+                  <linearGradient id="bar-usual" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#c2d3b8" />
+                    <stop offset="100%" stopColor="#a5b99a" />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid vertical={false} stroke="#e3ebe0" strokeDasharray="3 4" />
+                <XAxis
+                  dataKey="hour"
+                  ticks={[0, 6, 12, 18, 23]}
+                  interval={0}
+                  tickFormatter={clockHour}
+                  axisLine={{ stroke: "#d5dfd5" }}
+                  tickLine={false}
+                  tick={tick}
+                />
+                <YAxis
+                  allowDecimals={false}
+                  width={28}
+                  axisLine={false}
+                  tickLine={false}
+                  tick={tick}
+                />
                 <Tooltip
-                  labelFormatter={(h) => `${h}:00`}
+                  labelFormatter={(label) =>
+                    Number(label) === nowHour
+                      ? `${clockHour(nowHour)} hour, so far`
+                      : `${clockHour(Number(label))} hour`
+                  }
                   contentStyle={{
                     background: "#ffffff",
                     borderColor: "#d5dfd5",
+                    borderRadius: 12,
                     color: "#253e36",
                   }}
-                  itemStyle={{ color: "#4e7460" }}
-                  cursor={{ fill: "#ffffff0a" }}
+                  cursor={{ fill: "#253e360a", radius: 6 }}
                 />
+                <Legend iconType="circle" iconSize={9} wrapperStyle={{ fontSize: 12 }} />
+                <ReferenceLine
+                  x={nowHour}
+                  stroke="#253e36"
+                  strokeDasharray="3 3"
+                  label={{ value: "Now", position: "top", fontSize: 11, fill: "#253e36" }}
+                />
+                {hasUsual && (
+                  <Bar
+                    isAnimationActive={false}
+                    dataKey="usual"
+                    name="Typical day"
+                    fill="url(#bar-usual)"
+                    radius={[6, 6, 2, 2]}
+                    maxBarSize={22}
+                  />
+                )}
                 <Bar
                   isAnimationActive={false}
-                  dataKey="count"
-                  name="Average events"
-                  radius={[4, 4, 0, 0]}
-                >
-                  {d.baseline.hourly_activity.map((_, h) => (
-                    <Cell key={h} fill={h === hour ? "#184e42" : "#a5b99a"} />
-                  ))}
-                </Bar>
+                  dataKey="recent"
+                  name="Movements"
+                  fill="url(#bar-recent)"
+                  radius={[6, 6, 2, 2]}
+                  maxBarSize={22}
+                />
               </BarChart>
             </ResponsiveContainer>
           </div>
-          <small>Hours shown in {d.baseline.timezone}. Dark blue marks the current hour.</small>
+          <small>
+            Times in {d.baseline.timezone}. The dashed line marks now; later hours fill in as the
+            day goes. Bars count movement and loud sounds.
+          </small>
         </section>
         <Settings key={d.id} device={d} onDone={refresh} />
       </div>
-      <div className="detail-grid">
+      <div className="detail-grid logs">
         <section className="panel">
           <h2>Recent activity</h2>
           {!d.events.length && <p>No activity recorded yet.</p>}
-          {d.events.map((e) => (
-            <div className="timeline" key={e.id}>
-              <span className="event-dot" />
-              <div>
-                <strong>
-                  {e.type === "reply"
-                    ? `Reply: ${e.value?.replaceAll("_", " ")}`
-                    : e.type === "motion"
-                      ? "Movement detected"
-                      : `${e.type} detected`}
-                </strong>
-                <p>{date(e.ts, d.baseline.timezone)}</p>
+          <ShortList items={d.events}>
+            {(e) => (
+              <div className="timeline" key={e.id}>
+                <span className="event-dot" />
+                <div>
+                  <strong>
+                    {e.type === "reply"
+                      ? `Reply: ${e.value?.replaceAll("_", " ")}`
+                      : e.type === "motion"
+                        ? "Movement detected"
+                        : `${e.type} detected`}
+                  </strong>
+                  <p>{date(e.ts, d.baseline.timezone)}</p>
+                </div>
               </div>
-            </div>
-          ))}
+            )}
+          </ShortList>
         </section>
         <section className="panel">
           <h2>Check-in history</h2>
           {!d.alerts.length && <p>No alerts yet.</p>}
-          {d.alerts.map((a) => (
-            <article className="alert-item" key={a.id}>
-              <strong>{a.kind.replaceAll("_", " ")}</strong>
-              <p>{a.message}</p>
-              <small>
-                {date(a.sent_at, d.baseline.timezone)} · {a.resolved_at ? "Resolved" : "Open"} ·{" "}
-                {a.sms_sent ? "Text sent" : "No text sent"}
-              </small>
-            </article>
-          ))}
+          <ShortList items={d.alerts}>
+            {(a) => (
+              <article className="alert-item" key={a.id}>
+                <strong>{a.kind.replaceAll("_", " ")}</strong>
+                <p>{a.message}</p>
+                <small>
+                  {date(a.sent_at, d.baseline.timezone)} · {a.resolved_at ? "Resolved" : "Open"} ·{" "}
+                  {a.sms_sent ? "Text sent" : "No text sent"}
+                </small>
+              </article>
+            )}
+          </ShortList>
         </section>
       </div>
     </>
   );
 }
+// The API accepts a fixed check-in limit of 1 to 48 hours (contract: 60-2880 minutes).
+const MIN_LIMIT = 60;
+const MAX_LIMIT = 2880;
 function Settings({ device, onDone }: { device: Device; onDone: () => void }) {
   const [name, setName] = useState(device.name);
-  const [limit, setLimit] = useState(device.limit_minutes);
+  const [hours, setHours] = useState(String(Math.floor(device.limit_minutes / 60)));
+  const [minutes, setMinutes] = useState(String(device.limit_minutes % 60));
+  const limit = Number(hours || 0) * 60 + Number(minutes || 0);
   return (
     <section className="panel">
       <h2>Device settings</h2>
@@ -357,19 +453,42 @@ function Settings({ device, onDone }: { device: Device; onDone: () => void }) {
         Device name
         <input value={name} maxLength={100} onChange={(e) => setName(e.target.value)} />
       </label>
-      <label>
-        Check in after no activity for
-        <select value={limit} onChange={(e) => setLimit(Number(e.target.value))}>
-          {![360, 720, 1440].includes(limit) && <option value={limit}>{limit} minutes</option>}
-          <option value={360}>6 hours</option>
-          <option value={720}>12 hours</option>
-          <option value={1440}>24 hours</option>
-        </select>
-      </label>
-      <p className="muted">A learned routine may suggest a check-in sooner.</p>
+      <fieldset className="duration">
+        <legend>Check in after no activity for</legend>
+        <label>
+          <input
+            type="number"
+            inputMode="numeric"
+            min={0}
+            max={MAX_LIMIT / 60}
+            value={hours}
+            onChange={(e) => setHours(e.target.value)}
+          />
+          hours
+        </label>
+        <label>
+          <input
+            type="number"
+            inputMode="numeric"
+            min={0}
+            max={59}
+            value={minutes}
+            onChange={(e) => setMinutes(e.target.value)}
+          />
+          minutes
+        </label>
+      </fieldset>
+      <p className="muted">
+        Between 1 and 48 hours. A learned routine may suggest a check-in sooner.
+      </p>
       <Action
         run={() => {
           if (!name.trim()) return Promise.reject(new Error("Enter a device name"));
+          const whole = [hours, minutes].every((value) => /^\d*$/.test(value));
+          if (!whole || Number(minutes || 0) > 59)
+            return Promise.reject(new Error("Enter whole hours and 0-59 minutes"));
+          if (limit < MIN_LIMIT || limit > MAX_LIMIT)
+            return Promise.reject(new Error("Choose a check-in time between 1 and 48 hours"));
           return api.updateDevice(device.id, {
             name: name.trim(),
             limit_minutes: limit,

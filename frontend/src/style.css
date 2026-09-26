@@ -111,6 +111,57 @@ textarea {
   min-height: 100px;
   resize: vertical;
 }
+/* Log panels size to their entries rather than stretching to match each other. */
+.logs {
+  align-items: start;
+}
+.logs .timeline {
+  padding: 11px 0;
+}
+.logs .alert-item {
+  padding: 13px 0;
+}
+/* Centered, in the secondary sage green. */
+.show-more {
+  display: block;
+  margin: 16px auto 0;
+  min-height: 38px;
+  padding: 8px 18px;
+  background: #dce6d4;
+  border-color: #a5b99a;
+  color: var(--ink);
+}
+.show-more:hover {
+  background: #c9d8bf;
+  border-color: #8fa684;
+  color: var(--ink);
+}
+/* Hours and minutes side by side, each box followed by its unit. */
+.duration {
+  border: 0;
+  padding: 0;
+  margin: 19px 0 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.duration legend {
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.5;
+  padding: 0;
+  margin-bottom: 6px;
+}
+.duration label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-weight: 400;
+}
+.duration input {
+  width: 96px;
+}
 h1,
 h2,
 h3 {
