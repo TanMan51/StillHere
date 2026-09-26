@@ -3,6 +3,7 @@
 import os
 import tempfile
 
+os.environ["CHECKER_ENABLED"] = "false"  # tests call checker.check_all() directly
 os.environ["DATABASE_URL"] = f"sqlite:///{tempfile.mkdtemp()}/test.db"
 for key in (
     "TWILIO_ACCOUNT_SID",

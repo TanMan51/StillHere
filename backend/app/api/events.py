@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException
 from pydantic import BaseModel, model_validator
 from sqlmodel import Session
 
-from .. import clock, config
+from .. import alerts, clock, config
 from ..db import get_session
 from ..models import Device, Event
 
@@ -42,17 +42,11 @@ def post_event(
     if device is None:
         raise HTTPException(404, f"Unknown device {body.device_id}")
 
-    now = clock.now()
-    session.add(
-        Event(device_id=device.id, type=body.type, value=body.value, level=body.level, ts=now)
+    event = Event(
+        device_id=device.id, type=body.type, value=body.value, level=body.level, ts=clock.now()
     )
-    # Any event proves the device is alive; offline detection runs on real time.
-    device.last_seen_real_at = clock.real_now()
-    if body.type == "heartbeat":
-        device.last_heartbeat_at = now
-    elif body.type == "motion":
-        device.last_motion_at = now
-    # TODO(A, hours 4-20): all-clear on motion, loud/fall -> awaiting_reply, reply handling.
+    session.add(event)
+    alerts.handle_event(session, device, event)
     session.add(device)
     session.commit()
     return {"ok": True}

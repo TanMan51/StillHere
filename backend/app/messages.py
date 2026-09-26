@@ -13,9 +13,11 @@ def _local_time(dt: datetime) -> str:
 
 
 def inactivity(device_name: str, last_motion: datetime, note: str | None = None) -> str:
-    extra = f" {note}" if note else ""
+    """note is the learned routine's own sentence (routine.evaluate), used as-is when present."""
+    if note:
+        return f"StillHere: {note}"
     return (
-        f"StillHere: No activity from {device_name} since {_local_time(last_motion)}.{extra} "
+        f"StillHere: No activity from {device_name} since {_local_time(last_motion)}. "
         "You may want to call her."
     )
 

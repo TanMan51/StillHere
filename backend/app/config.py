@@ -48,6 +48,11 @@ DEMO_TIME_SCALE = float(os.getenv("DEMO_TIME_SCALE", "1440"))
 OFFLINE_AFTER = timedelta(hours=2)
 REPLY_WINDOW = timedelta(seconds=30)
 
+# The check loop runs every CHECK_INTERVAL_SECONDS real seconds. It is cheap, so one short
+# interval serves both normal and demo mode. CHECKER_ENABLED=false turns it off (tests).
+CHECK_INTERVAL_SECONDS = float(os.getenv("CHECK_INTERVAL_SECONDS", "2"))
+CHECKER_ENABLED = os.getenv("CHECKER_ENABLED", "true").lower() != "false"
+
 # SimpleTexting. When the API key is set, texts go through SimpleTexting instead of Twilio.
 SIMPLETEXTING_API_KEY = os.getenv("SIMPLETEXTING_API_KEY", "")
 SIMPLETEXTING_FROM_NUMBER = os.getenv("SIMPLETEXTING_FROM_NUMBER", "")  # optional
