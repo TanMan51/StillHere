@@ -1,23 +1,21 @@
-"""Learned daily routine for one device.
+"""Pure, timezone-aware routine learning. Owned by Person B.
 
-Owner: Person B. Person A calls these functions from checker.py and the API
-but never edits this file.
-
-Everything here is a pure function: no database, no clock, no network.
-Callers pass in the data and the current time (from clock.now(), so the demo
-clock works automatically).
-
-This is the v1 STUB. The function signatures are the agreement between A and B.
-The bodies only apply the fixed limit for now. Person B replaces the bodies
-later WITHOUT changing any signature or field name.
+Thresholds describe elapsed inactivity at each local hour, not the duration
+of every gap touching that hour. This lets an ordinary night be quiet while
+still noticing that the usual breakfast activity never happened.
 """
 
 from __future__ import annotations
 
+from bisect import bisect_right
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timedelta
+from datetime import timezone as dt_timezone
+from math import ceil
+from zoneinfo import ZoneInfo
 
 MIN_DAYS_FOR_READY = 5
+UTC = dt_timezone.utc
 
 
 @dataclass
@@ -29,25 +27,92 @@ class Baseline:
     hourly_threshold_minutes: list[float] = field(default_factory=lambda: [0.0] * 24)
 
     def to_dict(self) -> dict:
-        """Exactly the `baseline` object in contract/api.md."""
+        """Exactly the baseline object in contract/api.md."""
         return asdict(self)
 
 
 @dataclass
 class Verdict:
     irregular: bool
-    reason: str | None  # "learned", "fixed_limit", or None
-    note: str | None  # sentence for the SMS and the dashboard's routine_note, or None
+    reason: str | None
+    note: str | None
+
+
+def _utc(value: datetime) -> datetime:
+    if value.tzinfo is None or value.utcoffset() is None:
+        raise ValueError("Expected a timezone-aware datetime")
+    return value.astimezone(UTC)
 
 
 def compute_baseline(motion_times: list[datetime], now: datetime, timezone: str) -> Baseline:
-    """Learn the device's usual daily pattern from past motion events.
+    """Learn from the last 28 days, excluding future events and duplicate timestamps.
 
-    motion_times: timezone-aware UTC datetimes of motion events, in any order.
-    now: the current time. Only events before `now` count.
-    timezone: IANA name like "America/New_York". Hour-of-day buckets use it.
+    For each historical hour, sample elapsed inactivity at its start, end,
+    and immediately before each motion. Use p90 * 1.5, with a 60-minute floor.
+    Missing hours use a conservative 2880-minute ceiling. The caller's fixed
+    limit is applied by evaluate(), since it is not part of this signature.
+    Partial boundary days do not count toward the five-day readiness rule.
     """
-    return Baseline(ready=False, days_of_data=0, timezone=timezone)
+    end = _utc(now)
+    zone = ZoneInfo(timezone)
+    times = sorted({_utc(t) for t in motion_times if end - timedelta(days=28) <= _utc(t) < end})
+    if not times:
+        return Baseline(False, 0, timezone)
+    first_day = times[0].astimezone(zone).date()
+    today = end.astimezone(zone).date()
+    observed_days = (today - first_day).days
+    counts = [0] * 24
+    for t in times:
+        if t.astimezone(zone).date() < today:
+            counts[t.astimezone(zone).hour] += 1
+    # Require five complete local days with motion; exclude the first partial day.
+    complete_active_days = {
+        t.astimezone(zone).date() for t in times if first_day < t.astimezone(zone).date() < today
+    }
+    samples: list[list[float]] = [[] for _ in range(24)]
+    cursor = times[0].astimezone(zone).replace(minute=0, second=0, microsecond=0).astimezone(
+        UTC
+    ) + timedelta(hours=1)
+    while cursor + timedelta(hours=1) <= end:
+        stop = cursor + timedelta(hours=1)
+        local = cursor.astimezone(zone)
+        if first_day < local.date() < today:
+            index = bisect_right(times, cursor) - 1
+            if index >= 0:
+                last = times[index]
+                maximum = (cursor - last).total_seconds() / 60
+                index += 1
+                while index < len(times) and times[index] < stop:
+                    maximum = max(maximum, (times[index] - last).total_seconds() / 60)
+                    last = times[index]
+                    index += 1
+                maximum = max(maximum, (stop - last).total_seconds() / 60)
+                samples[local.hour].append(maximum)
+        cursor = stop
+    thresholds = []
+    for values in samples:
+        p90 = sorted(values)[ceil(len(values) * 0.9) - 1] if values else 1920
+        thresholds.append(round(max(60.0, min(2880.0, p90 * 1.5)), 2))
+    days = len(complete_active_days)
+    return Baseline(
+        days >= MIN_DAYS_FOR_READY,
+        days,
+        timezone,
+        [round(c / max(1, observed_days), 3) for c in counts],
+        thresholds,
+    )
+
+
+def _threshold(baseline: Baseline, now: datetime, fixed_limit_minutes: int) -> tuple[float, str]:
+    if fixed_limit_minutes <= 0:
+        raise ValueError("fixed_limit_minutes must be positive")
+    if baseline.ready:
+        learned = baseline.hourly_threshold_minutes[
+            now.astimezone(ZoneInfo(baseline.timezone)).hour
+        ]
+        if 0 < learned < fixed_limit_minutes:
+            return learned, "learned"
+    return float(fixed_limit_minutes), "fixed_limit"
 
 
 def evaluate(
@@ -57,33 +122,53 @@ def evaluate(
     fixed_limit_minutes: int,
     device_name: str,
 ) -> Verdict:
-    """Decide whether the current stretch without motion is unusual.
+    """Apply the smaller of this hour's learned threshold and the fixed limit.
 
-    Flags when the gap passes the learned threshold for the current hour
-    (reason "learned") or the fixed limit (reason "fixed_limit"), whichever
-    comes first. When `note` is None, the caller uses its standard message.
-    last_motion is None when the device has never reported motion.
+    Equality triggers a check-in so next_alert_time() and evaluate() agree.
+    No motion yet is left to the backend's onboarding/offline policy.
     """
+    current = _utc(now)
     if last_motion is None:
-        return Verdict(irregular=False, reason=None, note=None)
-    gap_minutes = (now - last_motion) / timedelta(minutes=1)
-    if gap_minutes > fixed_limit_minutes:
-        return Verdict(irregular=True, reason="fixed_limit", note=None)
-    return Verdict(irregular=False, reason=None, note=None)
+        return Verdict(False, None, None)
+    gap = (current - _utc(last_motion)).total_seconds() / 60
+    threshold, reason = _threshold(baseline, current, fixed_limit_minutes)
+    if gap < threshold:
+        return Verdict(False, None, None)
+    note = None
+    if reason == "learned":
+        local = current.astimezone(ZoneInfo(baseline.timezone))
+        note = (
+            f"{device_name} has had no activity for {int(gap)} minutes. "
+            f"That is longer than usual around {local.strftime('%I:%M %p')} "
+            f"({baseline.timezone}). You may want to check in."
+        )
+    return Verdict(True, reason, note)
 
 
 def next_alert_time(
-    baseline: Baseline,
-    last_motion: datetime | None,
-    now: datetime,
-    fixed_limit_minutes: int,
+    baseline: Baseline, last_motion: datetime | None, now: datetime, fixed_limit_minutes: int
 ) -> datetime | None:
-    """When evaluate() will first flag, assuming no new motion arrives.
+    """Find the first threshold crossing, including drops at local hour changes.
 
-    Used for next_alert_at in the API. Returned on the same clock as `now`
-    (the demo clock in demo mode); the caller converts it to real seconds.
-    Returns None when the device has never reported motion.
+    Walk in UTC to handle skipped/repeated DST hours correctly. The minute
+    scan also finds local hour transitions in half/quarter-hour timezones.
+    The result is on the server clock; Person A converts to real seconds.
     """
+    current = _utc(now)
     if last_motion is None:
         return None
-    return last_motion + timedelta(minutes=fixed_limit_minutes)
+    last = _utc(last_motion)
+    deadline = last + timedelta(minutes=fixed_limit_minutes)
+    if not baseline.ready:
+        return max(current, deadline)
+    cursor = current
+    while cursor <= deadline:
+        threshold, _ = _threshold(baseline, cursor, fixed_limit_minutes)
+        crossing = last + timedelta(minutes=threshold)
+        if crossing <= cursor:
+            return cursor
+        next_minute = cursor.replace(second=0, microsecond=0) + timedelta(minutes=1)
+        if crossing < next_minute:
+            return crossing
+        cursor = next_minute
+    return max(current, deadline)
