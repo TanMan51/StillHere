@@ -158,7 +158,10 @@ Response: `{"ok": true}`
 - `POST /api/contacts`, body `{"name": string, "phone": string}` → `201` with the new Contact.
   Phone must be E.164 format (`+14045550123`), otherwise `422`.
 - `DELETE /api/contacts/{id}` → `204`, no body
-- `POST /api/contacts/{id}/test` → sends a test text. Response `{"ok": true, "channel": "sms" | "email"}`
+- `POST /api/contacts/{id}/test` → sends a test text. Response
+  `{"ok": true, "channel": "sms" | "email", "sms_error": string | null}`. When the text fails and
+  the test falls back to email, `sms_error` says why (for example the SMS provider's error);
+  otherwise it is `null`.
 
 **Contact object:** `id` (int), `name`, `phone`, `created_at` (timestamp)
 
@@ -213,3 +216,4 @@ Wording lives in `backend/app/messages.py`. These are examples, not a fixed form
 ## Changelog
 
 - v1: initial contract.
+- v1.1: `POST /api/contacts/{id}/test` response adds `sms_error`.
