@@ -85,7 +85,11 @@ def test_motion_and_heartbeat_update_device(client):
 def test_patch_device_validates_limit(client):
     ok = client.patch("/api/devices/fridge-1", json={"limit_minutes": 360})
     assert ok.status_code == 200 and ok.json()["device"]["limit_minutes"] == 360
-    assert client.patch("/api/devices/fridge-1", json={"limit_minutes": 5}).status_code == 422
+    minutes_only = client.patch("/api/devices/fridge-1", json={"limit_minutes": 30})
+    assert minutes_only.status_code == 200
+    assert minutes_only.json()["device"]["limit_minutes"] == 30
+    assert client.patch("/api/devices/fridge-1", json={"limit_minutes": 0}).status_code == 422
+    assert client.patch("/api/devices/fridge-1", json={"limit_minutes": 2881}).status_code == 422
     assert client.patch("/api/devices/nope", json={"name": "x"}).status_code == 404
 
 

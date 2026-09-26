@@ -329,6 +329,16 @@ nav a:hover {
   background: #eee9d7;
   border-bottom: 1px solid #e5f4ff30;
 }
+/* Behind every in-flow element but above the page background. */
+.model-swarm {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  z-index: -1;
+  pointer-events: none;
+  opacity: 0.55;
+}
 main {
   position: relative;
   max-width: 1320px;

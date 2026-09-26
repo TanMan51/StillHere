@@ -28,6 +28,7 @@ import type { Device, MotionSensitivity, Status } from "./types";
 import PlacementGuide, { DeviceSetup, SetupPrompt } from "./PlacementGuide";
 import { hasDemoSession, saveDemoSession } from "./Login";
 import LandingPage from "./LandingPage";
+import ModelSwarm from "./ModelSwarm";
 import { useReveal, useSmoothScroll } from "./motion";
 
 const labels: Record<Status, string> = {
@@ -438,8 +439,8 @@ function DevicePage() {
     </>
   );
 }
-// The API accepts a fixed check-in limit of 1 to 48 hours (contract: 60-2880 minutes).
-const MIN_LIMIT = 60;
+// The API accepts a fixed check-in limit of 1 minute to 48 hours (contract: 1-2880 minutes).
+const MIN_LIMIT = 1;
 const MAX_LIMIT = 2880;
 const sensitivities: { value: MotionSensitivity; label: string }[] = [
   { value: "low", label: "Low: only firm movement" },
@@ -486,7 +487,7 @@ function Settings({ device, onDone }: { device: Device; onDone: () => void }) {
         </label>
       </fieldset>
       <p className="muted">
-        Between 1 and 48 hours. A learned routine may suggest a check-in sooner.
+        Anywhere from 1 minute to 48 hours. A learned routine may suggest a check-in sooner.
       </p>
       <label className="toggle">
         <input
@@ -494,11 +495,10 @@ function Settings({ device, onDone }: { device: Device; onDone: () => void }) {
           checked={soundEnabled}
           onChange={(e) => setSoundEnabled(e.target.checked)}
         />
-        Listen for loud sounds
+        Alert on loud sounds
       </label>
       <p className="muted">
-        When on, a loud sound makes the sensor ask &ldquo;Are you okay?&rdquo;. Falls are always
-        checked.
+        When off, a loud sound with no reply no longer texts your contacts. Falls always do.
       </p>
       <label>
         Accelerometer sensitivity
@@ -514,7 +514,7 @@ function Settings({ device, onDone }: { device: Device; onDone: () => void }) {
         </select>
       </label>
       <p className="muted">
-        How much movement counts as activity. The sensor updates within an hour.
+        How much movement counts as activity. The sensor picks up changes within 30 seconds.
       </p>
       <Action
         run={() => {
@@ -523,7 +523,9 @@ function Settings({ device, onDone }: { device: Device; onDone: () => void }) {
           if (!whole || Number(minutes || 0) > 59)
             return Promise.reject(new Error("Enter whole hours and 0-59 minutes"));
           if (limit < MIN_LIMIT || limit > MAX_LIMIT)
-            return Promise.reject(new Error("Choose a check-in time between 1 and 48 hours"));
+            return Promise.reject(
+              new Error("Choose a check-in time between 1 minute and 48 hours"),
+            );
           return api.updateDevice(device.id, {
             name: name.trim(),
             limit_minutes: limit,
@@ -806,6 +808,7 @@ export default function App() {
   if (isLanding) return <LandingPage key={location.key} onLogin={login} loggedIn={loggedIn} />;
   return (
     <>
+      <ModelSwarm />
       <header className="topbar">
         <Link className="brand" to="/">
           <img src="/icon.svg" alt="" />

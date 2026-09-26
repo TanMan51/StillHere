@@ -54,7 +54,7 @@ interface SensorModel {
 
 // Fetched once per page load; toggling motion re-creates the GL objects, not the download.
 let modelRequest: Promise<SensorModel> | null = null;
-function loadModel() {
+export function loadModel() {
   modelRequest ??= fetch("/models/sensor.bin")
     .then((response) => {
       if (!response.ok) throw new Error(`sensor model: HTTP ${response.status}`);

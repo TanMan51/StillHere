@@ -40,7 +40,7 @@ def get_device(device_id: str, session: Session = Depends(get_session)):
 
 class DevicePatch(BaseModel):
     name: str | None = Field(default=None, min_length=1)
-    limit_minutes: int | None = Field(default=None, ge=60, le=2880)
+    limit_minutes: int | None = Field(default=None, ge=1, le=2880)
     sound_enabled: bool | None = None
     motion_sensitivity: Literal["low", "medium", "high"] | None = None
 

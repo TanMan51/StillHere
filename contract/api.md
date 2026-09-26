@@ -77,9 +77,10 @@ every 30 s in demo mode.
 Response `202`: `{"ok": true, "settings": {"sound_enabled": boolean, "motion_sensitivity": string}}`
 
 The device applies `settings` after every post (heartbeats included), so changes from the
-dashboard reach it within one heartbeat. With `sound_enabled` false it stops listening for loud
-sounds; `motion_sensitivity` picks its accelerometer jolt threshold (`high` reacts to the
-smallest jolts). Falls are always reported.
+dashboard reach it within one heartbeat. `motion_sensitivity` picks its motion trigger (`low`
+0.6 g, `medium` 0.35 g, `high` 0.2 g from rest). The device ignores `sound_enabled` and keeps
+reporting loud sounds; the server drops them while it is false. Falls are always reported, at the
+device's default fall trigger.
 
 Example bodies: `fixtures/event_examples.json`
 
@@ -150,7 +151,7 @@ DeviceDetail is the Device object plus:
 
 ### `PATCH /api/devices/{id}`
 
-Body (all optional): `{"name": string, "limit_minutes": integer 60–2880, "sound_enabled": boolean,
+Body (all optional): `{"name": string, "limit_minutes": integer 1–2880, "sound_enabled": boolean,
 "motion_sensitivity": motion sensitivity}`
 
 Response: `{"server_now": timestamp, "device": Device}`
@@ -225,3 +226,4 @@ Wording lives in `backend/app/messages.py`. These are examples, not a fixed form
 - v1: initial contract.
 - Add `sound_enabled` and `motion_sensitivity` to Device, `PATCH /api/devices/{id}`, and the
   `POST /api/events` response.
+- Lower the `limit_minutes` minimum from 60 to 1 so a check-in time can be minutes only.
