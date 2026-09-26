@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlmodel import Session, delete, select
 
-from .. import clock, config, routine
+from .. import clock, config, demo_community, routine
 from ..db import get_session
 from ..models import Alert, Device, Event
 
@@ -81,4 +81,6 @@ def reset(session: Session = Depends(get_session)):
         device.reply_deadline_real = None
         session.add(device)
     session.commit()
+    if config.SEED_DEMO_COMMUNITY:
+        demo_community.seed_states(session)
     return {"ok": True}

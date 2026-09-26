@@ -27,6 +27,7 @@ export interface Device {
   active_alert: Alert | null;
   sound_enabled: boolean;
   motion_sensitivity: MotionSensitivity;
+  resident_id: string | null;
 }
 export interface MotionEvent {
   id: number;
@@ -66,4 +67,57 @@ export interface DevicesResponse {
 export interface DetailResponse {
   server_now: string;
   device: DeviceDetail;
+}
+export type Role = "family" | "provider";
+export interface User {
+  id: number;
+  email: string;
+  name: string;
+  role: Role;
+  community_id: string | null;
+  community_name: string | null;
+  resident_id: string | null;
+}
+export interface LoginResponse {
+  token: string;
+  user: User;
+}
+export interface Resident {
+  id: string;
+  community_id: string | null;
+  first_name: string;
+  last_name: string;
+  floor: number | null;
+  unit: string | null;
+  share_alerts_with_family: boolean;
+  share_activity_with_family: boolean;
+  device_ids: string[];
+}
+export type UnitState = "fine" | "watch" | "worry" | "offline" | "urgent";
+export interface Community {
+  id: string;
+  name: string;
+  watch_after_minutes: number;
+  worry_after_minutes: number;
+}
+export interface Unit {
+  resident_id: string;
+  first_name: string;
+  last_name: string;
+  floor: number | null;
+  unit: string | null;
+  state: UnitState;
+  minutes_since_motion: number | null;
+  last_motion_at: string | null;
+  last_event: { type: MotionEvent["type"]; value: string | null; ts: string } | null;
+  online: boolean;
+  last_heartbeat_at: string | null;
+  device_id: string | null;
+  device_status: Status | null;
+  active_alert: Alert | null;
+}
+export interface CommunityResponse {
+  server_now: string;
+  community: Community;
+  units: Unit[];
 }

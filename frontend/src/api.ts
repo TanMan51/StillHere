@@ -1,27 +1,52 @@
 import type {
+  Community,
+  CommunityResponse,
   Contact,
   Demo,
   DetailResponse,
   Device,
   DevicesResponse,
+  LoginResponse,
   MotionSensitivity,
+  Resident,
+  User,
 } from "./types";
+import { LOGOUT_EVENT, loadSession, saveSession } from "./session";
 // Production uses the same-origin backend; local development defaults to fixtures.
 // An explicit flag overrides the default. Never fall back to fixtures on API errors.
 export const useMock =
   import.meta.env.VITE_USE_MOCK === "true" ||
   (import.meta.env.VITE_USE_MOCK !== "false" && !import.meta.env.PROD);
+/** A failed API response, with its HTTP status for callers that react to specific codes. */
+export class ApiError extends Error {
+  constructor(
+    readonly status: number,
+    message: string,
+  ) {
+    super(message);
+  }
+}
 async function request<T>(path: string, method = "GET", body?: unknown): Promise<T> {
   if (useMock) return (await import("./mock")).mockRequest(path, method, body) as Promise<T>;
+  const token = loadSession()?.token;
+  const headers: Record<string, string> = {};
+  if (body !== undefined) headers["Content-Type"] = "application/json";
+  if (token) headers.Authorization = `Bearer ${token}`;
   const response = await fetch(`/api${path}`, {
     method,
-    headers: body === undefined ? undefined : { "Content-Type": "application/json" },
+    headers,
     body: body === undefined ? undefined : JSON.stringify(body),
     signal: AbortSignal.timeout(10000),
   });
+  if (response.status === 401 && token) {
+    // The login expired or the server restarted with a new key: send the user back to log in.
+    saveSession(null);
+    window.dispatchEvent(new Event(LOGOUT_EVENT));
+  }
   if (!response.ok) {
     const error: unknown = await response.json().catch(() => null);
-    throw new Error(
+    throw new ApiError(
+      response.status,
       typeof error === "object" &&
         error !== null &&
         "detail" in error &&
@@ -33,6 +58,17 @@ async function request<T>(path: string, method = "GET", body?: unknown): Promise
   return response.status === 204 ? (undefined as T) : response.json();
 }
 export const api = {
+  login: (email: string, password: string) =>
+    request<LoginResponse>("/auth/login", "POST", { email, password }),
+  me: () => request<{ user: User }>("/auth/me"),
+  residents: () => request<Resident[]>("/residents"),
+  community: () => request<CommunityResponse>("/community"),
+  updateCommunity: (body: { watch_after_minutes?: number; worry_after_minutes?: number }) =>
+    request<Community>("/community", "PATCH", body),
+  updateResident: (
+    id: string,
+    body: { share_alerts_with_family?: boolean; share_activity_with_family?: boolean },
+  ) => request<Resident>(`/residents/${encodeURIComponent(id)}`, "PATCH", body),
   devices: () => request<DevicesResponse>("/devices"),
   device: (id: string) => request<DetailResponse>(`/devices/${encodeURIComponent(id)}`),
   updateDevice: (

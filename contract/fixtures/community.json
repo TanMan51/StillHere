@@ -1,0 +1,120 @@
+{
+  "server_now": "2026-09-26T20:15:41Z",
+  "community": {
+    "id": "maple-grove",
+    "name": "Maple Grove Senior Living",
+    "watch_after_minutes": 240,
+    "worry_after_minutes": 480
+  },
+  "units": [
+    {
+      "resident_id": "mg-101",
+      "first_name": "Harold",
+      "last_name": "Bennett",
+      "floor": 1,
+      "unit": "101",
+      "state": "fine",
+      "minutes_since_motion": 10,
+      "last_motion_at": "2026-09-26T20:05:41Z",
+      "last_event": {
+        "type": "motion",
+        "value": null,
+        "ts": "2026-09-26T20:05:41Z"
+      },
+      "online": true,
+      "last_heartbeat_at": "2026-09-26T20:15:41Z",
+      "device_id": "sim-101",
+      "device_status": "ok",
+      "active_alert": null
+    },
+    {
+      "resident_id": "mg-103",
+      "first_name": "Walter",
+      "last_name": "Okafor",
+      "floor": 1,
+      "unit": "103",
+      "state": "watch",
+      "minutes_since_motion": 316,
+      "last_motion_at": "2026-09-26T14:59:41Z",
+      "last_event": {
+        "type": "motion",
+        "value": null,
+        "ts": "2026-09-26T14:59:41Z"
+      },
+      "online": true,
+      "last_heartbeat_at": "2026-09-26T20:15:41Z",
+      "device_id": "sim-103",
+      "device_status": "ok",
+      "active_alert": null
+    },
+    {
+      "resident_id": "mg-106",
+      "first_name": "Beatrice",
+      "last_name": "Moreau",
+      "floor": 1,
+      "unit": "106",
+      "state": "worry",
+      "minutes_since_motion": 765,
+      "last_motion_at": "2026-09-26T07:30:41Z",
+      "last_event": {
+        "type": "motion",
+        "value": null,
+        "ts": "2026-09-26T07:30:41Z"
+      },
+      "online": true,
+      "last_heartbeat_at": "2026-09-26T20:15:41Z",
+      "device_id": "sim-106",
+      "device_status": "ok",
+      "active_alert": null
+    },
+    {
+      "resident_id": "mg-208",
+      "first_name": "Mabel",
+      "last_name": "Iqbal",
+      "floor": 2,
+      "unit": "208",
+      "state": "offline",
+      "minutes_since_motion": 190,
+      "last_motion_at": "2026-09-26T17:05:41Z",
+      "last_event": {
+        "type": "motion",
+        "value": null,
+        "ts": "2026-09-26T17:05:41Z"
+      },
+      "online": false,
+      "last_heartbeat_at": "2026-09-26T17:45:41Z",
+      "device_id": "sim-208",
+      "device_status": "ok",
+      "active_alert": null
+    },
+    {
+      "resident_id": "mg-305",
+      "first_name": "Chester",
+      "last_name": "Aoki",
+      "floor": 3,
+      "unit": "305",
+      "state": "urgent",
+      "minutes_since_motion": 25,
+      "last_motion_at": "2026-09-26T19:50:41Z",
+      "last_event": {
+        "type": "reply",
+        "value": "help",
+        "ts": "2026-09-26T20:14:41Z"
+      },
+      "online": true,
+      "last_heartbeat_at": "2026-09-26T20:15:41Z",
+      "device_id": "sim-305",
+      "device_status": "urgent",
+      "active_alert": {
+        "id": 1,
+        "device_id": "sim-305",
+        "kind": "urgent",
+        "message": "URGENT from StillHere: Chester in apartment 305 asked for help. Please check in now.",
+        "sms_sent": false,
+        "sent_at": "2026-09-26T20:14:41Z",
+        "resolved_at": null,
+        "resolved_by": null
+      }
+    }
+  ]
+}

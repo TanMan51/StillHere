@@ -1,0 +1,24 @@
+[
+  {
+    "id": "mg-101",
+    "community_id": "maple-grove",
+    "first_name": "Harold",
+    "last_name": "Bennett",
+    "floor": 1,
+    "unit": "101",
+    "share_alerts_with_family": true,
+    "share_activity_with_family": true,
+    "device_ids": ["sim-101"]
+  },
+  {
+    "id": "mg-204",
+    "community_id": "maple-grove",
+    "first_name": "Rosa",
+    "last_name": "Delgado",
+    "floor": 2,
+    "unit": "204",
+    "share_alerts_with_family": true,
+    "share_activity_with_family": true,
+    "device_ids": ["door-1", "fridge-1", "walker-1"]
+  }
+]

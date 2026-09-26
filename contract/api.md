@@ -23,8 +23,10 @@ software people look at it, and it gets a line in the changelog at the bottom.
   - `401` bad or missing device token
   - `404` unknown device, alert, or contact id
   - `422` invalid request body
-- **Auth:** only the device endpoint is authenticated (`X-Device-Token` header). Dashboard
-  endpoints are open for the hackathon.
+- **Auth:** the device endpoint is authenticated with `X-Device-Token`. Dashboard endpoints
+  accept an optional `Authorization: Bearer <token>` from `POST /api/auth/login` and then only
+  return what that user may see (see Accounts and roles). Without a token they stay open for
+  the hackathon, unless the server sets `AUTH_REQUIRED=true`, which makes them answer `401`.
 - **Devices are defined in backend config** (id, name, object type, token). There is no
   endpoint to register a device.
 
@@ -111,6 +113,7 @@ Response: `{"server_now": timestamp, "devices": [Device]}` (see `fixtures/device
 | `active_alert`        | Alert or null      | The currently unresolved alert, if any.                                                                           |
 | `sound_enabled`       | boolean            | Whether loud sounds start an "Are you okay?" check. Default `true`. `loud` events are ignored while false.        |
 | `motion_sensitivity`  | motion sensitivity | Accelerometer sensitivity the device should use. Default `"medium"`.                                              |
+| `resident_id`         | string or null     | The resident this device belongs to, e.g. `"mg-204"`.                                                             |
 
 ### `GET /api/devices/{id}`
 
@@ -163,6 +166,72 @@ returns the device to `ok` if nothing else is active. No body.
 
 Response: `{"ok": true}`
 
+### Accounts and roles
+
+Two roles: `family` (a caregiver who follows one resident) and `provider` (healthcare staff who
+see every resident in their community). With a token, `GET /api/devices`, `GET/PATCH
+/api/devices/{id}`, and `POST /api/alerts/{id}/resolve` only cover the user's residents;
+anything else answers `404`, as if it didn't exist. For family caregivers, a resident who
+doesn't share alerts shows `active_alert: null` and `alerts: []`, and one who doesn't share
+activity shows `events: []`.
+
+- `POST /api/auth/login`, body `{"email": string, "password": string}` →
+  `{"token": string, "user": User}` (see `fixtures/auth_login.json`), or `401`.
+  Tokens last 12 hours.
+- `GET /api/auth/me` → `{"user": User}`, or `401` without a valid token.
+
+**User object:** `id` (int), `email`, `name`, `role` (`"family"` or `"provider"`),
+`community_id` (string or null), `community_name` (string or null), `resident_id` (string or
+null; set for family caregivers).
+
+### Residents
+
+- `GET /api/residents` → `[Resident]`, the residents the caller may see, by floor then unit
+  (see `fixtures/residents.json`).
+- `PATCH /api/residents/{id}`, body (all optional) `{"share_alerts_with_family": boolean,
+"share_activity_with_family": boolean}` → Resident.
+
+**Resident object:** `id` (string), `community_id` (string or null), `first_name`,
+`last_name`, `floor` (integer or null), `unit` (string or null), `share_alerts_with_family`
+(boolean, default true), `share_activity_with_family` (boolean, default true), `device_ids`
+([string]).
+
+### Community (healthcare providers)
+
+Both endpoints need a provider token: `401` without a login, `403` for family caregivers.
+
+- `GET /api/community` → `{"server_now": timestamp, "community": Community, "units": [Unit]}`,
+  units by floor then unit (see `fixtures/community.json`, which shows one unit per state).
+- `PATCH /api/community`, body (all optional) `{"watch_after_minutes": integer 1–10080,
+"worry_after_minutes": integer 1–10080}` → Community. `422` unless watch comes before worry.
+
+**Community object:** `id`, `name`, `watch_after_minutes` (default 240), `worry_after_minutes`
+(default 480).
+
+**Unit object** (one apartment and its resident):
+
+| Field                  | Type                                          | Notes                                                                                 |
+| ---------------------- | --------------------------------------------- | ------------------------------------------------------------------------------------- |
+| `resident_id`          | string                                        |                                                                                       |
+| `first_name`           | string                                        |                                                                                       |
+| `last_name`            | string                                        |                                                                                       |
+| `floor`                | integer or null                               |                                                                                       |
+| `unit`                 | string or null                                | Apartment number, e.g. `"204"`.                                                       |
+| `state`                | `fine`, `watch`, `worry`, `offline`, `urgent` | See below. The dashboard displays it and never recomputes it.                         |
+| `minutes_since_motion` | integer or null                               | Demo-clock minutes since any of the resident's devices last moved.                    |
+| `last_motion_at`       | timestamp or null                             |                                                                                       |
+| `last_event`           | `{"type", "value", "ts"}` or null             | Newest non-heartbeat event from any of the resident's devices.                        |
+| `online`               | boolean                                       | True when any of the resident's devices is online.                                    |
+| `last_heartbeat_at`    | timestamp or null                             |                                                                                       |
+| `device_id`            | string or null                                | The device to open for details: the one with the alert, else the one that moved last. |
+| `device_status`        | status or null                                | That device's status.                                                                 |
+| `active_alert`         | Alert or null                                 | The resident's open alert, urgent ones first.                                         |
+
+**Unit `state`**, most severe first: `urgent` (an open `urgent` or `no_reply` alert), `offline`
+(no device online, so a dead battery never looks like safety), `worry` (no movement for
+`worry_after_minutes`, or none recorded), `watch` (no movement for `watch_after_minutes`),
+`fine`.
+
 ### Contacts
 
 - `GET /api/contacts` → `[Contact]` (see `fixtures/contacts.json`)
@@ -200,7 +269,8 @@ demo the learned-routine alert.
 
 Everything uses the demo clock (timestamps, alert checks, the baseline) **except**:
 
-- Offline detection uses real time, so heartbeats don't look hours apart.
+- Offline detection uses real time, so heartbeats don't look hours apart. The server setting
+  `OFFLINE_AFTER_SECONDS` (default 7200) can shorten the 2-hour window for a live demo.
 - The 30-second reply window uses real time, so a person has a fair chance to answer.
 - `seconds_until_alert` is always in real seconds.
 
@@ -227,3 +297,6 @@ Wording lives in `backend/app/messages.py`. These are examples, not a fixed form
 - Add `sound_enabled` and `motion_sensitivity` to Device, `PATCH /api/devices/{id}`, and the
   `POST /api/events` response.
 - Lower the `limit_minutes` minimum from 60 to 1 so a check-in time can be minutes only.
+- Add accounts and roles: `POST /api/auth/login`, `GET /api/auth/me`, optional bearer tokens
+  on dashboard endpoints, `GET/PATCH /api/residents`, and `resident_id` on Device.
+- Add the community housing grid: `GET/PATCH /api/community`.

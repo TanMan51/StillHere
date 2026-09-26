@@ -1,0 +1,12 @@
+{
+  "token": "1.1790000000.3f6c0e9a...",
+  "user": {
+    "id": 2,
+    "email": "staff@maplegrove.example",
+    "name": "Maple Grove wellness staff",
+    "role": "provider",
+    "community_id": "maple-grove",
+    "community_name": "Maple Grove Senior Living",
+    "resident_id": null
+  }
+}

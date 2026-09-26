@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import secrets
 from datetime import timedelta
 from pathlib import Path
 
@@ -41,11 +42,25 @@ DEVICE_TOKENS = {d["id"]: d["token"] for d in DEVICES}
 
 DEFAULT_LIMIT_MINUTES = 720
 
+# Accounts. SECRET_KEY signs login tokens; without one, a random key is made at startup and
+# everyone is logged out when the server restarts. Set a long random value when deployed.
+SECRET_KEY = os.getenv("SECRET_KEY", "") or secrets.token_hex(32)
+SESSION_HOURS = float(os.getenv("SESSION_HOURS", "12"))
+# The contract keeps dashboard endpoints open for the hackathon: without a login token they
+# answer as before. AUTH_REQUIRED=true makes them reject requests that have no token.
+AUTH_REQUIRED = os.getenv("AUTH_REQUIRED", "false").lower() == "true"
+# Seeds the demo community (Maple Grove Senior Living) with invented residents and accounts.
+SEED_DEMO_COMMUNITY = os.getenv("SEED_DEMO_COMMUNITY", "true").lower() != "false"
+# Password for the seeded demo accounts. They hold invented data only.
+DEMO_PASSWORD = os.getenv("DEMO_PASSWORD", "stillhere-demo")
+
 # Demo clock: at 1440, one real second is 24 simulated minutes (12 h passes in 30 s).
 DEMO_TIME_SCALE = float(os.getenv("DEMO_TIME_SCALE", "1440"))
 
 # Durations the contract says are measured in REAL time, even in demo mode.
-OFFLINE_AFTER = timedelta(hours=2)
+# OFFLINE_AFTER_SECONDS shortens the 2-hour offline window for demos, so unplugging the sensor
+# turns its apartment gray on stage. The firmware heartbeats every 30 s, so 90 is a safe minimum.
+OFFLINE_AFTER = timedelta(seconds=float(os.getenv("OFFLINE_AFTER_SECONDS", "7200")))
 # REPLY_WINDOW_SECONDS shortens the "Are you okay?" wait for hardware testing; the contract says 30.
 REPLY_WINDOW = timedelta(seconds=float(os.getenv("REPLY_WINDOW_SECONDS", "30")))
 

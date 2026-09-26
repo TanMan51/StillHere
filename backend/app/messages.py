@@ -26,6 +26,13 @@ def urgent(device_name: str) -> str:
     return f"URGENT from StillHere: Mom asked for help near {device_name}. Please call her now."
 
 
+def resident_urgent(first_name: str, unit: str) -> str:
+    return (
+        f"URGENT from StillHere: {first_name} in apartment {unit} asked for help. "
+        "Please check in now."
+    )
+
+
 def no_reply(device_name: str) -> str:
     return (
         "StillHere: Loud sound at Mom's, and no reply when asked if she's okay. "

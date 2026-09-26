@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 
 import pytest
-from app import clock
+from app import clock, config
 from app.main import app
 from fastapi.testclient import TestClient
 
@@ -471,3 +471,149 @@ def test_frontend_routes_fall_back_to_index(tmp_path):
     assert web.get("/manifest.webmanifest").text == "{}"
     assert web.get("/api/nope").status_code == 404
     assert web.get("/../backend/app/config.py").text == "<html>dashboard</html>"
+
+
+def _login(client, email):
+    res = client.post("/api/auth/login", json={"email": email, "password": "stillhere-demo"})
+    assert res.status_code == 200
+    return {"Authorization": f"Bearer {res.json()['token']}"}
+
+
+FAMILY = "demo@stillhere.example"
+PROVIDER = "staff@maplegrove.example"
+
+
+def test_login_returns_role_and_rejects_bad_password(client):
+    res = client.post("/api/auth/login", json={"email": PROVIDER, "password": "stillhere-demo"})
+    assert res.json()["user"]["role"] == "provider"
+    assert res.json()["user"]["community_name"] == "Maple Grove Senior Living"
+    assert set(res.json()) == set(fixture("auth_login.json"))
+    bad = client.post("/api/auth/login", json={"email": PROVIDER, "password": "nope"})
+    assert bad.status_code == 401
+    assert client.get("/api/auth/me").status_code == 401
+    me = client.get("/api/auth/me", headers=_login(client, FAMILY)).json()["user"]
+    assert me["role"] == "family" and me["resident_id"] == "mg-204"
+
+
+def test_family_sees_only_their_resident(client):
+    family = _login(client, FAMILY)
+    ids = {d["id"] for d in client.get("/api/devices", headers=family).json()["devices"]}
+    assert ids == {"fridge-1", "walker-1", "door-1"}
+    assert client.get("/api/devices/sim-101", headers=family).status_code == 404
+    residents = client.get("/api/residents", headers=family).json()
+    assert [r["id"] for r in residents] == ["mg-204"]
+    assert set(residents[0]) == set(fixture("residents.json")[0])
+
+
+def test_provider_sees_whole_community(client):
+    provider = _login(client, PROVIDER)
+    devices = client.get("/api/devices", headers=provider).json()["devices"]
+    assert {"fridge-1", "sim-101", "sim-308"} <= {d["id"] for d in devices}
+    assert len(client.get("/api/residents", headers=provider).json()) == 24
+
+
+def test_open_requests_still_see_everything(client):
+    ids = {d["id"] for d in client.get("/api/devices").json()["devices"]}
+    assert {"fridge-1", "sim-101"} <= ids
+
+
+def test_auth_required_rejects_open_requests(client, monkeypatch):
+    monkeypatch.setattr(config, "AUTH_REQUIRED", True)
+    assert client.get("/api/devices").status_code == 401
+    assert client.get("/api/devices", headers=_login(client, FAMILY)).status_code == 200
+
+
+def test_bad_token_is_rejected(client):
+    bad = {"Authorization": "Bearer 1.9999999999.forged"}
+    assert client.get("/api/devices", headers=bad).status_code == 401
+
+
+def test_sharing_hides_activity_and_alerts_from_family_only(client):
+    _event(client, {"type": "motion"})
+    client.patch(
+        "/api/residents/mg-204",
+        json={"share_activity_with_family": False, "share_alerts_with_family": False},
+    )
+    try:
+        family = client.get("/api/devices/fridge-1", headers=_login(client, FAMILY)).json()
+        assert family["device"]["events"] == []
+        provider = client.get("/api/devices/fridge-1", headers=_login(client, PROVIDER)).json()
+        assert [e["type"] for e in provider["device"]["events"]] == ["motion"]
+    finally:
+        client.patch(
+            "/api/residents/mg-204",
+            json={"share_activity_with_family": True, "share_alerts_with_family": True},
+        )
+
+
+def test_check_loop_skips_simulated_devices(client):
+    from app import checker
+
+    client.post("/api/demo", json={"enabled": True, "time_scale": 1_000_000})
+    checker.check_all()
+    sim = client.get("/api/devices/sim-101").json()["device"]
+    assert sim["alerts"] == [] and sim["status"] == "ok"
+
+
+def test_grid_state_rules():
+    from app.community import grid_state
+
+    assert grid_state(30, True, False, 240, 480) == "fine"
+    assert grid_state(300, True, False, 240, 480) == "watch"
+    assert grid_state(480, True, False, 240, 480) == "worry"
+    assert grid_state(None, True, False, 240, 480) == "worry"
+    assert grid_state(30, False, False, 240, 480) == "offline"  # offline beats "fine"
+    assert grid_state(30, False, True, 240, 480) == "urgent"  # urgent beats everything
+
+
+def _grid(client):
+    res = client.get("/api/community", headers=_login(client, PROVIDER))
+    assert res.status_code == 200
+    return {u["unit"]: u for u in res.json()["units"]}
+
+
+def test_community_grid_has_seeded_mix(client):
+    units = _grid(client)
+    assert len(units) == 24
+    states = [u["state"] for u in units.values()]
+    assert states.count("urgent") == 1 and units["305"]["active_alert"]["kind"] == "urgent"
+    assert units["208"]["state"] == "offline"
+    assert units["106"]["state"] == "worry" and units["103"]["state"] == "watch"
+    assert states.count("fine") >= 12
+    assert units["101"]["first_name"] == "Harold" and units["101"]["device_id"] == "sim-101"
+    assert set(units["101"]) == set(fixture("community.json")["units"][0])
+
+
+def test_community_is_for_providers_only(client):
+    assert client.get("/api/community").status_code == 401
+    assert client.get("/api/community", headers=_login(client, FAMILY)).status_code == 403
+
+
+def test_community_thresholds_are_configurable(client):
+    provider = _login(client, PROVIDER)
+    try:
+        bad = client.patch("/api/community", json={"watch_after_minutes": 600}, headers=provider)
+        assert bad.status_code == 422  # yellow must come before red
+        ok = client.patch(
+            "/api/community",
+            json={"watch_after_minutes": 5, "worry_after_minutes": 10},
+            headers=provider,
+        )
+        assert ok.json()["worry_after_minutes"] == 10
+        assert _grid(client)["101"]["state"] == "worry"
+    finally:
+        client.patch(
+            "/api/community",
+            json={"watch_after_minutes": 240, "worry_after_minutes": 480},
+            headers=provider,
+        )
+
+
+def test_demo_clock_moves_grid_colors(client):
+    before = _grid(client)["101"]
+    assert before["state"] == "fine"
+    client.post("/api/demo", json={"enabled": True, "time_scale": 3600 * 24})
+    import time
+
+    time.sleep(0.5)  # half a real second is 12 demo hours at this speed
+    assert _grid(client)["101"]["state"] == "worry"

@@ -1,10 +1,39 @@
 import deviceFixture from "../../contract/fixtures/devices.json";
 import detailFixture from "../../contract/fixtures/device_detail.json";
 import contactFixture from "../../contract/fixtures/contacts.json";
-import type { Baseline, Contact, Demo, Device, DeviceDetail } from "./types";
+import loginFixture from "../../contract/fixtures/auth_login.json";
+import residentFixture from "../../contract/fixtures/residents.json";
+import communityFixture from "../../contract/fixtures/community.json";
+import { loadSession } from "./session";
+import type {
+  Baseline,
+  CommunityResponse,
+  Contact,
+  Demo,
+  Device,
+  DeviceDetail,
+  Resident,
+  User,
+} from "./types";
 
 // Stateful, in-memory fixtures: edits survive polling, but a reload restores the demo.
 let contacts = structuredClone(contactFixture) as Contact[];
+const residents = structuredClone(residentFixture) as Resident[];
+const community = structuredClone(communityFixture) as CommunityResponse;
+// The same two demo accounts the backend seeds (demo_community.py).
+const DEMO_PASSWORD = "stillhere-demo";
+const accounts: User[] = [
+  {
+    id: 1,
+    email: "demo@stillhere.example",
+    name: "Sam (family)",
+    role: "family",
+    community_id: null,
+    community_name: null,
+    resident_id: "mg-204",
+  },
+  loginFixture.user as User,
+];
 let nextContact = 3;
 let clockAnchor = Date.parse(deviceFixture.server_now);
 let realAnchor = Date.now();
@@ -45,6 +74,45 @@ export async function mockRequest(path: string, method: string, raw?: unknown): 
           ),
         )
       : null;
+  }
+  if (path === "/auth/login") {
+    const email = String(body.email).trim().toLowerCase();
+    const user = accounts.find((a) => a.email === email);
+    if (!user || body.password !== DEMO_PASSWORD) throw new Error("Email or password is incorrect");
+    return response({ token: `mock.${user.id}`, user });
+  }
+  if (path === "/auth/me") {
+    const user = loadSession()?.user;
+    if (!user) throw new Error("Log in to continue");
+    return response({ user });
+  }
+  if (path === "/residents") {
+    const user = loadSession()?.user;
+    return response(
+      user?.role === "family" ? residents.filter((r) => r.id === user.resident_id) : residents,
+    );
+  }
+  if (parts[0] === "residents" && method === "PATCH") {
+    const resident = residents.find((r) => r.id === decodeURIComponent(parts[1]));
+    if (!resident) throw new Error("Resident not found");
+    if (typeof body.share_alerts_with_family === "boolean")
+      resident.share_alerts_with_family = body.share_alerts_with_family;
+    if (typeof body.share_activity_with_family === "boolean")
+      resident.share_activity_with_family = body.share_activity_with_family;
+    return response(resident);
+  }
+  if (path === "/community") {
+    if (loadSession()?.user.role !== "provider")
+      throw new Error("Only healthcare providers can see the community");
+    if (method === "PATCH") {
+      const watch = Number(body.watch_after_minutes ?? community.community.watch_after_minutes);
+      const worry = Number(body.worry_after_minutes ?? community.community.worry_after_minutes);
+      if (watch >= worry) throw new Error("The yellow threshold must come before the red one");
+      community.community.watch_after_minutes = watch;
+      community.community.worry_after_minutes = worry;
+      return response(community.community);
+    }
+    return response({ ...community, server_now });
   }
   if (path === "/devices") return response({ server_now, devices });
   if (parts[0] === "devices") {

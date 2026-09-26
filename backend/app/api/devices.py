@@ -6,36 +6,58 @@ from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
-from sqlmodel import Session, select
+from sqlmodel import Session
 
-from .. import clock
+from .. import auth, clock
 from ..db import get_session
-from ..models import Alert, Device
+from ..models import Alert, Device, User
 from ..serialize import active_alert, device_detail_dict, device_dict
 
 router = APIRouter()
 
 
-def _get_device(session: Session, device_id: str) -> Device:
+def _get_device(session: Session, device_id: str, user: User | None) -> Device:
     device = session.get(Device, device_id)
-    if device is None:
+    # Devices outside the viewer's residents look the same as ones that don't exist.
+    if device is None or not auth.can_see(session, user, device.resident_id):
         raise HTTPException(404, f"Unknown device {device_id}")
     return device
 
 
+def _shared(session: Session, user: User | None, device: Device, body: dict) -> dict:
+    """Blank out what the resident doesn't share with family caregivers."""
+    shows_alerts, shows_activity = auth.family_limits(session, user, device.resident_id)
+    if not shows_alerts:
+        body["active_alert"] = None
+        if "alerts" in body:
+            body["alerts"] = []
+    if not shows_activity and "events" in body:
+        body["events"] = []
+    return body
+
+
 @router.get("/devices")
-def list_devices(session: Session = Depends(get_session)):
-    devices = session.exec(select(Device).order_by(Device.id)).all()
+def list_devices(
+    session: Session = Depends(get_session), user: User | None = Depends(auth.current_user)
+):
     return {
         "server_now": clock.iso(clock.now()),
-        "devices": [device_dict(session, d) for d in devices],
+        "devices": [
+            _shared(session, user, d, device_dict(session, d))
+            for d in auth.visible_devices(session, user)
+        ],
     }
 
 
 @router.get("/devices/{device_id}")
-def get_device(device_id: str, session: Session = Depends(get_session)):
-    device = _get_device(session, device_id)
-    return {"server_now": clock.iso(clock.now()), "device": device_detail_dict(session, device)}
+def get_device(
+    device_id: str,
+    session: Session = Depends(get_session),
+    user: User | None = Depends(auth.current_user),
+):
+    device = _get_device(session, device_id, user)
+    detail = _shared(session, user, device, device_detail_dict(session, device))
+    return {"server_now": clock.iso(clock.now()), "device": detail}
 
 
 class DevicePatch(BaseModel):
@@ -46,8 +68,13 @@ class DevicePatch(BaseModel):
 
 
 @router.patch("/devices/{device_id}")
-def patch_device(device_id: str, body: DevicePatch, session: Session = Depends(get_session)):
-    device = _get_device(session, device_id)
+def patch_device(
+    device_id: str,
+    body: DevicePatch,
+    session: Session = Depends(get_session),
+    user: User | None = Depends(auth.current_user),
+):
+    device = _get_device(session, device_id, user)
     if body.name is not None:
         device.name = body.name
     if body.limit_minutes is not None:
@@ -59,13 +86,19 @@ def patch_device(device_id: str, body: DevicePatch, session: Session = Depends(g
     session.add(device)
     session.commit()
     session.refresh(device)
-    return {"server_now": clock.iso(clock.now()), "device": device_dict(session, device)}
+    body = _shared(session, user, device, device_dict(session, device))
+    return {"server_now": clock.iso(clock.now()), "device": body}
 
 
 @router.post("/alerts/{alert_id}/resolve")
-def resolve_alert(alert_id: int, session: Session = Depends(get_session)):
+def resolve_alert(
+    alert_id: int,
+    session: Session = Depends(get_session),
+    user: User | None = Depends(auth.current_user),
+):
     alert = session.get(Alert, alert_id)
-    if alert is None:
+    owner = session.get(Device, alert.device_id) if alert else None
+    if alert is None or owner is None or not auth.can_see(session, user, owner.resident_id):
         raise HTTPException(404, f"Unknown alert {alert_id}")
     now = clock.now()
     if alert.resolved_at is None:

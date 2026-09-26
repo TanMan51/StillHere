@@ -1,116 +1,124 @@
 import { useState, type FormEvent } from "react";
-import { Link } from "react-router-dom";
-import { useMock } from "./api";
+import { api, ApiError } from "./api";
+import { saveSession, type Session } from "./session";
+import type { Role } from "./types";
 
-const DEMO_EMAIL = "demo@stillhere.example";
+// Seeded demo accounts (backend demo_community.py). They hold invented data only.
+const DEMO_ACCOUNTS: Record<Role, { label: string; email: string }> = {
+  family: { label: "Family caregiver", email: "demo@stillhere.example" },
+  provider: { label: "Healthcare provider", email: "staff@maplegrove.example" },
+};
 const DEMO_PASSWORD = "stillhere-demo";
-const SESSION_KEY = "stillhere-demo-session";
 
-export function hasDemoSession(): boolean {
-  try {
-    return sessionStorage.getItem(SESSION_KEY) === "active";
-  } catch {
-    return false;
-  }
-}
-
-export function saveDemoSession(active: boolean): void {
-  // This flag is only for navigating the demo. It does not authorize API requests.
-  try {
-    if (active) sessionStorage.setItem(SESSION_KEY, "active");
-    else sessionStorage.removeItem(SESSION_KEY);
-  } catch {
-    /* In-memory navigation still works when browser storage is unavailable. */
-  }
-}
-
-export default function Login({ onLogin }: { onLogin: () => void }) {
+export default function Login({ onLogin }: { onLogin: (session: Session) => void }) {
+  const [role, setRole] = useState<Role>("family");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
 
-  function submit(event: FormEvent) {
+  async function submit(event: FormEvent) {
     event.preventDefault();
-    if (!useMock) return;
-    if (
-      email.trim().toLowerCase() !== DEMO_EMAIL ||
-      password !== DEMO_PASSWORD
-    ) {
-      setError("Use the demo email and password shown below.");
-      return;
+    setBusy(true);
+    setError("");
+    try {
+      const session = await api.login(email.trim(), password);
+      if (session.user.role !== role) {
+        setError(
+          `This is a ${DEMO_ACCOUNTS[session.user.role].label.toLowerCase()} account. ` +
+            `Choose "${DEMO_ACCOUNTS[session.user.role].label}" above.`,
+        );
+        return;
+      }
+      setPassword("");
+      saveSession(session);
+      onLogin(session);
+    } catch (e) {
+      // 404/405 means the server predates accounts (an older deployment), not a bad password.
+      const outdated = e instanceof ApiError && (e.status === 404 || e.status === 405);
+      setError(
+        outdated
+          ? "This server doesn't support logins yet. It may be running an older version of StillHere."
+          : e instanceof Error
+            ? e.message
+            : "Login failed",
+      );
+    } finally {
+      setBusy(false);
     }
-    setPassword("");
-    onLogin();
   }
 
   return (
     <section className="panel login-panel" aria-labelledby="login-title">
       <h1 id="login-title">Log in</h1>
       <p>
-        {useMock
-          ? "Log in to view the sample devices and alerts."
-          : "Account login is not available yet."}
+        {role === "family"
+          ? "Follow the person you care for: their activity, alerts, and check-ins."
+          : "See every resident in your community at a glance."}
       </p>
-      {useMock ? (
-        <>
-          <form onSubmit={submit}>
-            <label htmlFor="login-email">Email address</label>
-            <input
-              id="login-email"
-              type="email"
-              autoComplete="username"
-              required
-              maxLength={254}
-              value={email}
-              onChange={(event) => {
-                setEmail(event.target.value);
-                setError("");
-              }}
-            />
-            <label htmlFor="login-password">Password</label>
-            <input
-              id="login-password"
-              type="password"
-              autoComplete="current-password"
-              required
-              maxLength={128}
-              value={password}
-              onChange={(event) => {
-                setPassword(event.target.value);
-                setError("");
-              }}
-            />
-            {error && (
-              <p className="error" role="alert">
-                {error}
-              </p>
-            )}
-            <button type="submit">Log in</button>
-          </form>
-          <aside className="login-demo" aria-label="Demo credentials">
-            <h2>Demo login</h2>
-            <p>
-              Email: <code>{DEMO_EMAIL}</code>
-              <br />
-              Password: <code>{DEMO_PASSWORD}</code>
-            </p>
-            <p>
-              This login is for sample data only. Do not enter a personal
-              password.
-            </p>
-          </aside>
-        </>
-      ) : (
-        <>
-          <p>
-            The dashboard currently has public access. This page does not secure
-            it.
+      <form onSubmit={submit}>
+        <fieldset className="role-choice">
+          <legend>I am a</legend>
+          {(Object.keys(DEMO_ACCOUNTS) as Role[]).map((value) => (
+            <label key={value}>
+              <input
+                type="radio"
+                name="role"
+                value={value}
+                checked={role === value}
+                onChange={() => {
+                  setRole(value);
+                  setError("");
+                }}
+              />
+              {DEMO_ACCOUNTS[value].label}
+            </label>
+          ))}
+        </fieldset>
+        <label htmlFor="login-email">Email address</label>
+        <input
+          id="login-email"
+          type="email"
+          autoComplete="username"
+          required
+          maxLength={254}
+          value={email}
+          onChange={(event) => {
+            setEmail(event.target.value);
+            setError("");
+          }}
+        />
+        <label htmlFor="login-password">Password</label>
+        <input
+          id="login-password"
+          type="password"
+          autoComplete="current-password"
+          required
+          maxLength={128}
+          value={password}
+          onChange={(event) => {
+            setPassword(event.target.value);
+            setError("");
+          }}
+        />
+        {error && (
+          <p className="error" role="alert">
+            {error}
           </p>
-          <Link className="back" to="/dashboard">
-            Open dashboard
-          </Link>
-        </>
-      )}
+        )}
+        <button type="submit" disabled={busy}>
+          {busy ? "Logging in…" : "Log in"}
+        </button>
+      </form>
+      <aside className="login-demo" aria-label="Demo credentials">
+        <h2>Demo login: {DEMO_ACCOUNTS[role].label.toLowerCase()}</h2>
+        <p>
+          Email: <code>{DEMO_ACCOUNTS[role].email}</code>
+          <br />
+          Password: <code>{DEMO_PASSWORD}</code>
+        </p>
+        <p>This login is for sample data only. Do not enter a personal password.</p>
+      </aside>
     </section>
   );
 }

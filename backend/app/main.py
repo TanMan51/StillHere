@@ -15,7 +15,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from . import checker, config
-from .api import contacts, demo, devices, events
+from .api import accounts, community, contacts, demo, devices, events, residents
 from .db import init_db
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
@@ -42,6 +42,9 @@ app.include_router(events.router, prefix="/api")
 app.include_router(devices.router, prefix="/api")
 app.include_router(contacts.router, prefix="/api")
 app.include_router(demo.router, prefix="/api")
+app.include_router(accounts.router, prefix="/api")
+app.include_router(community.router, prefix="/api")
+app.include_router(residents.router, prefix="/api")
 
 
 @app.get("/api/health")

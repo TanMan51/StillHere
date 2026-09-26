@@ -4,12 +4,13 @@ import IceScene from "./IceScene";
 import Login from "./Login";
 import UseCases from "./UseCases";
 import { useMock } from "./api";
+import type { Session } from "./session";
 
 export default function LandingPage({
   onLogin,
   loggedIn,
 }: {
-  onLogin: () => void;
+  onLogin: (session: Session) => void;
   loggedIn: boolean;
 }) {
   const location = useLocation();

@@ -5,7 +5,7 @@ from __future__ import annotations
 from sqlmodel import Session, col, select
 
 from . import clock, config, routine
-from .models import Alert, Contact, Device, Event
+from .models import Alert, Community, Contact, Device, Event, Resident, User
 
 
 def alert_dict(a: Alert) -> dict:
@@ -27,6 +27,36 @@ def event_dict(e: Event) -> dict:
 
 def contact_dict(c: Contact) -> dict:
     return {"id": c.id, "name": c.name, "phone": c.phone, "created_at": clock.iso(c.created_at)}
+
+
+def user_dict(session: Session, u: User) -> dict:
+    community = session.get(Community, u.community_id) if u.community_id else None
+    return {
+        "id": u.id,
+        "email": u.email,
+        "name": u.name,
+        "role": u.role,
+        "community_id": u.community_id,
+        "community_name": community.name if community else None,
+        "resident_id": u.resident_id,
+    }
+
+
+def resident_dict(session: Session, r: Resident) -> dict:
+    device_ids = session.exec(
+        select(Device.id).where(Device.resident_id == r.id).order_by(Device.id)
+    ).all()
+    return {
+        "id": r.id,
+        "community_id": r.community_id,
+        "first_name": r.first_name,
+        "last_name": r.last_name,
+        "floor": r.floor,
+        "unit": r.unit,
+        "share_alerts_with_family": r.share_alerts_with_family,
+        "share_activity_with_family": r.share_activity_with_family,
+        "device_ids": list(device_ids),
+    }
 
 
 def is_online(device: Device) -> bool:
@@ -91,6 +121,7 @@ def device_dict(session: Session, device: Device, baseline: routine.Baseline | N
         "routine_note": verdict.note if baseline.ready else None,
         "active_alert": alert_dict(alert) if alert else None,
         **device_settings(device),
+        "resident_id": device.resident_id,
     }
 
 

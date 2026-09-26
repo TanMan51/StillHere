@@ -26,9 +26,10 @@ import { api, useMock } from "./api";
 import { usePoll, useTick } from "./hooks";
 import type { Device, MotionSensitivity, Status } from "./types";
 import PlacementGuide, { DeviceSetup, SetupPrompt } from "./PlacementGuide";
-import { hasDemoSession, saveDemoSession } from "./Login";
+import { LOGOUT_EVENT, loadSession, saveSession, type Session } from "./session";
 import LandingPage from "./LandingPage";
 import ModelSwarm from "./ModelSwarm";
+import CommunityPage from "./Community";
 import { useReveal, useSmoothScroll } from "./motion";
 
 const labels: Record<Status, string> = {
@@ -760,7 +761,7 @@ function DemoPage() {
   );
 }
 export default function App() {
-  const [loggedIn, setLoggedIn] = useState(hasDemoSession);
+  const [session, setSession] = useState(loadSession);
   const [loggingOut, setLoggingOut] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
@@ -771,9 +772,15 @@ export default function App() {
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: "instant" });
   }, [location.pathname]);
+  useEffect(() => {
+    // api.ts announces an expired or rejected login; drop back to the login page.
+    const expired = () => setSession(null);
+    window.addEventListener(LOGOUT_EVENT, expired);
+    return () => window.removeEventListener(LOGOUT_EVENT, expired);
+  }, []);
   useSmoothScroll();
   useReveal(location.pathname);
-  if (useMock && !loggedIn && !isLanding) {
+  if (!session && !isLanding) {
     return (
       <Navigate
         to="/login"
@@ -782,9 +789,8 @@ export default function App() {
       />
     );
   }
-  function login() {
-    saveDemoSession(true);
-    setLoggedIn(true);
+  function login(next: Session) {
+    setSession(next);
     const from: unknown = location.state?.from;
     navigate(
       typeof from === "string" &&
@@ -793,19 +799,23 @@ export default function App() {
         !from.startsWith("/login") &&
         from !== "/"
         ? from
-        : "/dashboard",
+        : next.user.role === "provider"
+          ? "/community"
+          : "/dashboard",
       { replace: true },
     );
     window.scrollTo(0, 0);
   }
   function logout() {
     setLoggingOut(true);
-    saveDemoSession(false);
-    setLoggedIn(false);
+    saveSession(null);
+    setSession(null);
     navigate("/login", { replace: true, state: null });
     window.scrollTo(0, 0);
   }
-  if (isLanding) return <LandingPage key={location.key} onLogin={login} loggedIn={loggedIn} />;
+  if (isLanding || !session)
+    return <LandingPage key={location.key} onLogin={login} loggedIn={session !== null} />;
+  const { user } = session;
   return (
     <>
       <ModelSwarm />
@@ -815,19 +825,22 @@ export default function App() {
           StillHere<span className="brand-dot">.</span>
         </Link>
         <nav aria-label="Main navigation">
+          {user.role === "provider" && <NavLink to="/community">Community</NavLink>}
           <NavLink to="/dashboard" end>
             Overview
           </NavLink>
           <NavLink to="/contacts">Contacts</NavLink>
           <NavLink to="/setup">Setup</NavLink>
         </nav>
-        {useMock ? (
+        <div className="account">
+          <span className="account-name">
+            {user.role === "provider" ? (user.community_name ?? user.name) : user.name}
+            <small>{user.role === "provider" ? "Healthcare provider" : "Family caregiver"}</small>
+          </span>
           <button className="secondary logout-button" onClick={logout}>
             Log out
           </button>
-        ) : (
-          <Link to="/login">Log in</Link>
-        )}
+        </div>
       </header>
       {useMock && (
         <div className="mock-banner">
@@ -841,6 +854,12 @@ export default function App() {
         <div className="route-view" key={location.pathname}>
           <Routes>
             <Route path="/dashboard" element={<Overview />} />
+            <Route
+              path="/community"
+              element={
+                user.role === "provider" ? <CommunityPage /> : <Navigate to="/dashboard" replace />
+              }
+            />
             <Route path="/devices/:id" element={<DevicePage />} />
             <Route path="/contacts" element={<Contacts />} />
             <Route path="/setup" element={<Setup />} />
