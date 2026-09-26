@@ -115,3 +115,16 @@ def test_seed_and_reset(client):
     assert client.post("/api/demo/seed", json={"device_id": "fridge-1"}).json()["ok"] is True
     assert client.post("/api/demo/seed", json={"device_id": "nope"}).status_code == 404
     assert client.post("/api/demo/reset").json() == {"ok": True}
+
+
+def test_failed_test_text_returns_twilio_reason(client, monkeypatch):
+    from app import notify
+
+    def fail(to, body):
+        raise notify.SmsError("Twilio error 21608: The number is unverified.")
+
+    monkeypatch.setattr(notify, "send_sms", fail)
+    contact = client.post("/api/contacts", json={"name": "Sam", "phone": "+14045550123"}).json()
+    response = client.post(f"/api/contacts/{contact['id']}/test")
+    assert response.status_code == 502
+    assert response.json() == {"detail": "Twilio error 21608: The number is unverified."}
