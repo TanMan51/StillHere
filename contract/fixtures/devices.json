@@ -1,0 +1,68 @@
+{
+  "server_now": "2026-09-26T14:15:00Z",
+  "devices": [
+    {
+      "id": "fridge-1",
+      "name": "Mom's fridge",
+      "object_type": "fridge",
+      "status": "inactive_alert",
+      "status_since": "2026-09-26T13:00:40Z",
+      "online": true,
+      "last_motion_at": "2026-09-26T03:10:22Z",
+      "last_heartbeat_at": "2026-09-26T14:00:03Z",
+      "limit_minutes": 720,
+      "next_alert_at": null,
+      "seconds_until_alert": null,
+      "routine_note": "Mom's fridge is usually opened by 8:30 AM. No activity since 11:10 PM last night.",
+      "active_alert": {
+        "id": 88,
+        "device_id": "fridge-1",
+        "kind": "inactivity",
+        "message": "StillHere: No activity from Mom's fridge since 11:10 PM. It's usually opened by 8:30 AM. You may want to call her.",
+        "sms_sent": true,
+        "sent_at": "2026-09-26T13:00:40Z",
+        "resolved_at": null,
+        "resolved_by": null
+      }
+    },
+    {
+      "id": "walker-1",
+      "name": "Mom's walker",
+      "object_type": "walker",
+      "status": "ok",
+      "status_since": "2026-09-25T12:00:00Z",
+      "online": true,
+      "last_motion_at": "2026-09-26T14:02:31Z",
+      "last_heartbeat_at": "2026-09-26T14:00:11Z",
+      "limit_minutes": 720,
+      "next_alert_at": "2026-09-26T16:32:31Z",
+      "seconds_until_alert": 8251,
+      "routine_note": null,
+      "active_alert": null
+    },
+    {
+      "id": "door-1",
+      "name": "Front door",
+      "object_type": "door",
+      "status": "offline",
+      "status_since": "2026-09-26T12:48:02Z",
+      "online": false,
+      "last_motion_at": "2026-09-26T10:31:00Z",
+      "last_heartbeat_at": "2026-09-26T10:48:02Z",
+      "limit_minutes": 720,
+      "next_alert_at": null,
+      "seconds_until_alert": null,
+      "routine_note": null,
+      "active_alert": {
+        "id": 86,
+        "device_id": "door-1",
+        "kind": "offline",
+        "message": "StillHere: Mom's front door sensor is offline. Its battery or Wi-Fi may need a check.",
+        "sms_sent": true,
+        "sent_at": "2026-09-26T12:48:02Z",
+        "resolved_at": null,
+        "resolved_by": null
+      }
+    }
+  ]
+}

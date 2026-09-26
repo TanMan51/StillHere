@@ -1,0 +1,13 @@
+[
+  { "device_id": "fridge-1", "type": "motion", "value": null, "level": 1.8 },
+  { "device_id": "fridge-1", "type": "loud", "value": null, "level": 2400 },
+  {
+    "device_id": "fridge-1",
+    "type": "reply",
+    "value": "ok_button",
+    "level": null
+  },
+  { "device_id": "fridge-1", "type": "reply", "value": "help", "level": null },
+  { "device_id": "walker-1", "type": "fall", "value": null, "level": 3.7 },
+  { "device_id": "fridge-1", "type": "heartbeat", "value": null, "level": null }
+]
