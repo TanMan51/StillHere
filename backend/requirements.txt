@@ -5,3 +5,4 @@ APScheduler==3.11.3
 twilio==9.11.1
 python-dotenv==1.2.3
 pytest==9.1.1
+tzdata
