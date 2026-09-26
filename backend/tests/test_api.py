@@ -297,6 +297,24 @@ def test_family_resolve_returns_device_to_ok(client):
     assert device["alerts"][0]["resolved_by"] == "family"
 
 
+def test_family_check_in_counts_as_activity(client):
+    from app import checker
+
+    client.post("/api/contacts", json={"name": "Sam", "phone": "+14045550123"})
+    _jump_clock(client, "2026-09-26T00:00:00Z")
+    _event(client, {"type": "motion"})
+    _jump_clock(client, "2026-09-26T12:30:00Z")
+    checker.check_all()
+    alert_id = _fridge(client)["active_alert"]["id"]
+
+    client.post(f"/api/alerts/{alert_id}/resolve")
+    checker.check_all()  # the old gap must not fire a fresh inactivity alert
+    device = _fridge(client)
+    assert device["status"] == "ok"
+    assert device["last_motion_at"] >= "2026-09-26T12:30:00Z"  # demo clock keeps running
+    assert device["events"][0]["type"] == "motion"
+
+
 def test_silent_device_goes_offline_then_recovers(client, monkeypatch):
     from datetime import timedelta
 

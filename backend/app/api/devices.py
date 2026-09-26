@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlmodel import Session
 
-from .. import auth, clock
+from .. import alerts, auth, clock
 from ..db import get_session
 from ..models import Alert, Device, User
 from ..serialize import active_alert, device_detail_dict, device_dict
@@ -101,12 +101,15 @@ def resolve_alert(
     if alert is None or owner is None or not auth.can_see(session, user, owner.resident_id):
         raise HTTPException(404, f"Unknown alert {alert_id}")
     now = clock.now()
+    device = session.get(Device, alert.device_id)
     if alert.resolved_at is None:
         alert.resolved_at = now
         alert.resolved_by = "family"
         session.add(alert)
+        if device:
+            alerts.record_check_in(session, device)
+            session.add(device)
         session.commit()
-    device = session.get(Device, alert.device_id)
     if device and device.status != "ok" and active_alert(session, device.id) is None:
         device.status = "ok"
         device.status_since = now
