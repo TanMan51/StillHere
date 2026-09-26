@@ -54,12 +54,17 @@ def test_contact(contact_id: int, session: Session = Depends(get_session)):
     sms_error = None
     if notify.sms_configured() or not notify.email_configured():
         try:
-            return {"ok": True, "channel": notify.send_sms(contact.phone, body)}
+            return {"ok": True, "channel": notify.send_sms(contact.phone, body), "sms_error": None}
         except notify.SmsError as e:
             sms_error = e
     if notify.email_configured():
         try:
-            return {"ok": True, "channel": notify.send_email("StillHere test", body)}
+            channel = notify.send_email("StillHere test", body)
+            return {
+                "ok": True,
+                "channel": channel,
+                "sms_error": str(sms_error) if sms_error else None,
+            }
         except notify.EmailError as e:
             raise HTTPException(502, f"{sms_error}; {e}" if sms_error else str(e)) from e
     raise HTTPException(502, str(sms_error))

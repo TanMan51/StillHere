@@ -93,7 +93,7 @@ def test_contacts_crud(client):
     contact = created.json()
     assert set(contact) == set(fixture("contacts.json")[0])
     test = client.post(f"/api/contacts/{contact['id']}/test").json()
-    assert test == {"ok": True, "channel": "sms"}
+    assert test == {"ok": True, "channel": "sms", "sms_error": None}
     assert client.delete(f"/api/contacts/{contact['id']}").status_code == 204
     assert client.get("/api/contacts").json() == []
 
@@ -332,6 +332,7 @@ def test_alerts_fall_back_to_email_when_texts_fail(client, monkeypatch):
     assert client.post(f"/api/contacts/{contact['id']}/test").json() == {
         "ok": True,
         "channel": "email",
+        "sms_error": "SimpleTexting error 403: API access not enabled",
     }
 
 
