@@ -48,7 +48,14 @@ DEMO_TIME_SCALE = float(os.getenv("DEMO_TIME_SCALE", "1440"))
 OFFLINE_AFTER = timedelta(hours=2)
 REPLY_WINDOW = timedelta(seconds=30)
 
-# Twilio. When any of these is missing, notify.py logs texts instead of sending them.
+# SimpleTexting. When the API key is set, texts go through SimpleTexting instead of Twilio.
+SIMPLETEXTING_API_KEY = os.getenv("SIMPLETEXTING_API_KEY", "")
+SIMPLETEXTING_FROM_NUMBER = os.getenv("SIMPLETEXTING_FROM_NUMBER", "")  # optional
+SIMPLETEXTING_API_URL = os.getenv(
+    "SIMPLETEXTING_API_URL", "https://api-app2.simpletexting.com/v2/api/messages"
+)
+
+# Twilio. When neither provider is configured, notify.py logs texts instead of sending them.
 TWILIO_ACCOUNT_SID = os.getenv("TWILIO_ACCOUNT_SID", "")
 TWILIO_AUTH_TOKEN = os.getenv("TWILIO_AUTH_TOKEN", "")
 TWILIO_FROM_NUMBER = os.getenv("TWILIO_FROM_NUMBER", "")
