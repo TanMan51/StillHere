@@ -7,9 +7,11 @@ from __future__ import annotations
 
 import logging
 from contextlib import asynccontextmanager
+from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from . import checker, config
@@ -47,6 +49,22 @@ def health():
     return {"ok": True}
 
 
-# Must stay last: "/" catches everything the API routes above don't.
-if config.FRONTEND_DIST.is_dir():
-    app.mount("/", StaticFiles(directory=config.FRONTEND_DIST, html=True), name="frontend")
+def mount_frontend(app: FastAPI, dist: Path) -> None:
+    """Serve the built dashboard. Unknown paths get index.html so React Router's
+    client-side routes (like /demo) survive a reload."""
+    root = dist.resolve()
+    app.mount("/assets", StaticFiles(directory=root / "assets"), name="assets")
+
+    @app.get("/{path:path}", include_in_schema=False)
+    def frontend(path: str) -> FileResponse:
+        if path.startswith("api/"):
+            raise HTTPException(404, "Not Found")
+        file = (root / path).resolve()
+        if path and file.is_file() and file.is_relative_to(root):
+            return FileResponse(file)
+        return FileResponse(root / "index.html")
+
+
+# Must stay last: the catch-all route answers everything the API routes above don't.
+if (config.FRONTEND_DIST / "index.html").is_file():
+    mount_frontend(app, config.FRONTEND_DIST)
