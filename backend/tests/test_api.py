@@ -128,3 +128,41 @@ def test_failed_test_text_returns_twilio_reason(client, monkeypatch):
     response = client.post(f"/api/contacts/{contact['id']}/test")
     assert response.status_code == 502
     assert response.json() == {"detail": "Twilio error 21608: The number is unverified."}
+
+
+def test_simpletexting_request_shape(monkeypatch):
+    import json
+
+    from app import config, notify
+
+    sent = {}
+
+    class FakeResponse:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+        def read(self):
+            return b'{"id": "abc"}'
+
+    def fake_urlopen(request, timeout):
+        sent["url"] = request.full_url
+        sent["auth"] = request.get_header("Authorization")
+        sent["body"] = json.loads(request.data)
+        return FakeResponse()
+
+    monkeypatch.setattr(config, "SIMPLETEXTING_API_KEY", "test-key")
+    monkeypatch.setattr(config, "SIMPLETEXTING_FROM_NUMBER", "+14695550000")
+    monkeypatch.setattr(notify.urllib.request, "urlopen", fake_urlopen)
+
+    assert notify.send_sms("+14045550123", "hello") == "sms"
+    assert sent["url"] == config.SIMPLETEXTING_API_URL
+    assert sent["auth"] == "Bearer test-key"
+    assert sent["body"] == {
+        "contactPhone": "4045550123",
+        "accountPhone": "4695550000",
+        "mode": "AUTO",
+        "text": "hello",
+    }
