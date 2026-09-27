@@ -1,0 +1,5 @@
+# Real Wi-Fi password and device token live only on the board.
+pico/config.py
+# Build output and the Windows compiler binary (download it, see README).
+*.mpy
+mpy-cross*
