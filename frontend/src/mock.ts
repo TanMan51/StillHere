@@ -116,6 +116,28 @@ export async function mockRequest(path: string, method: string, raw?: unknown): 
       resident.share_activity_with_family = body.share_activity_with_family;
     return response(resident);
   }
+  if (path.startsWith("/places")) {
+    return response([
+      { name: "Atlanta, Georgia", latitude: 33.749, longitude: -84.388 },
+      { name: "Decatur, Georgia", latitude: 33.7748, longitude: -84.2963 },
+    ]);
+  }
+  if (path === "/community/weather/simulate") {
+    const kind = body.kind === "heat" || body.kind === "cold" ? body.kind : null;
+    community.weather = kind
+      ? {
+          id: `simulated-${kind}`,
+          event: kind === "heat" ? "Heat Advisory" : "Cold Weather Advisory",
+          kind,
+          headline: "Simulated for a demo",
+          ends_at: new Date(Date.parse(server_now) + 6 * 3600000).toISOString(),
+          source: "simulated",
+          watch_after_minutes: community.community.watch_after_minutes / 2,
+          worry_after_minutes: community.community.worry_after_minutes / 2,
+        }
+      : null;
+    return response({ weather: community.weather });
+  }
   if (path === "/community") {
     if (loadSession()?.user.role !== "provider")
       throw new Error("Only healthcare providers can see the community");

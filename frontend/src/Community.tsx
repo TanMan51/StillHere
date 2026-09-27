@@ -1,8 +1,17 @@
-import { useState } from "react";
+import { useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { api } from "./api";
 import { usePoll } from "./hooks";
-import type { Alert, Community, CommunityResponse, ResponseTimes, Unit, UnitState } from "./types";
+import type {
+  Alert,
+  Community,
+  CommunityResponse,
+  ResponseTimes,
+  Unit,
+  Place,
+  UnitState,
+  Weather,
+} from "./types";
 
 // Every state pairs its color with an icon and a word, so the grid never relies on color alone.
 export const STATES: Record<UnitState, { icon: string; label: string; meaning: string }> = {
@@ -165,7 +174,7 @@ function Cell({ unit, serverNow }: { unit: Unit; serverNow: string }) {
   );
 }
 
-function DemoControls({ onReset }: { onReset: () => void }) {
+function DemoControls({ onChange }: { onChange: () => void }) {
   const [error, setError] = useState("");
   const { data, refresh } = usePoll(api.demo);
   const enabled = !!data && data.enabled && data.time_scale === DEMO_SCALE;
@@ -182,7 +191,7 @@ function DemoControls({ onReset }: { onReset: () => void }) {
     setError("");
     try {
       await api.reset();
-      onReset();
+      onChange();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not reset the demo");
     }
@@ -255,23 +264,220 @@ function OpenAlerts({ data, onDone }: { data: CommunityResponse; onDone: () => v
   );
 }
 
+const KIND_LABEL = { heat: "Heat", cold: "Cold" } as const;
+/** "2 hours" for whole hours, otherwise "1h 30m". */
+function hoursText(minutes: number) {
+  if (minutes % 60) return elapsed(minutes);
+  return minutes === 60 ? "1 hour" : `${minutes / 60} hours`;
+}
+
+function WeatherBanner({ weather }: { weather: Weather }) {
+  const until = weather.ends_at
+    ? new Date(weather.ends_at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
+    : null;
+  return (
+    <section className={`weather-banner weather-${weather.kind}`} role="status">
+      <span className="weather-icon" aria-hidden="true">
+        {weather.kind === "heat" ? "☀" : "❄"}
+      </span>
+      <div>
+        <strong>
+          {weather.event} in effect{until ? ` until ${until}` : ""}
+          {weather.source === "simulated" ? " (simulated for this demo)" : ""}
+        </strong>
+        <p>
+          Older adults living alone are most at risk in extreme {weather.kind}. Apartments now turn
+          yellow after {hoursText(weather.watch_after_minutes)} and red after{" "}
+          {hoursText(weather.worry_after_minutes)} without movement, the check-in list shows
+          everyone quiet that long, and families of quiet residents get one text.
+        </p>
+        {weather.source === "nws" && <small>Source: National Weather Service</small>}
+      </div>
+    </section>
+  );
+}
+
+function LocationPicker({ onPicked, onCancel }: { onPicked: () => void; onCancel: () => void }) {
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState<Place[] | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState("");
+  async function run(task: () => Promise<void>) {
+    setBusy(true);
+    setMessage("");
+    try {
+      await task();
+    } catch (e) {
+      setMessage(e instanceof Error ? e.message : "Something went wrong");
+    } finally {
+      setBusy(false);
+    }
+  }
+  const search = (e: FormEvent) => {
+    e.preventDefault();
+    void run(async () => {
+      const found = await api.places(query.trim());
+      setResults(found);
+      if (!found.length) setMessage("No US city or town by that name. Try adding the state.");
+    });
+  };
+  const choose = (place: Place) =>
+    run(async () => {
+      await api.updateCommunity({
+        latitude: place.latitude,
+        longitude: place.longitude,
+        location_name: place.name,
+      });
+      onPicked();
+    });
+  const useMyLocation = () =>
+    run(async () => {
+      const position = await new Promise<GeolocationPosition>((resolve, reject) => {
+        if (!navigator.geolocation) reject(new Error("This browser can’t share its location."));
+        else
+          navigator.geolocation.getCurrentPosition(resolve, () =>
+            reject(new Error("Location access was blocked. Type a city or town instead.")),
+          );
+      });
+      await api.updateCommunity({
+        latitude: Math.round(position.coords.latitude * 10000) / 10000,
+        longitude: Math.round(position.coords.longitude * 10000) / 10000,
+      });
+      onPicked();
+    });
+  return (
+    <div className="location-picker">
+      <form onSubmit={search} className="location-search">
+        <label>
+          City or town
+          <input
+            value={query}
+            placeholder="e.g. Decatur"
+            minLength={2}
+            required
+            onChange={(e) => setQuery(e.target.value)}
+          />
+        </label>
+        <button type="submit" disabled={busy}>
+          Search
+        </button>
+      </form>
+      {results && results.length > 0 && (
+        <ul className="place-results" aria-label="Matching places">
+          {results.map((place) => (
+            <li key={`${place.latitude},${place.longitude}`}>
+              <button className="secondary" disabled={busy} onClick={() => choose(place)}>
+                {place.name}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      <div className="demo-buttons">
+        <button className="secondary" disabled={busy} onClick={useMyLocation}>
+          Use my current location
+        </button>
+        <button className="secondary" disabled={busy} onClick={onCancel}>
+          Cancel
+        </button>
+      </div>
+      {message && <small role="status">{message}</small>}
+      <small className="muted">
+        US locations only: advisories come from the National Weather Service.
+      </small>
+    </div>
+  );
+}
+
+function WeatherPanel({ data, onChange }: { data: CommunityResponse; onChange: () => void }) {
+  const [picking, setPicking] = useState(false);
+  const [error, setError] = useState("");
+  const { weather, conditions, community } = data;
+  async function simulate(kind: Weather["kind"] | null) {
+    setError("");
+    try {
+      await api.simulateWeather(kind);
+      onChange();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not change the weather");
+    }
+  }
+  const real = weather?.source === "nws";
+  return (
+    <section className="panel weather-panel" aria-labelledby="weather-title">
+      <div className="weather-summary">
+        <div>
+          <h2 id="weather-title">Weather · {community.location_name ?? "No location set"}</h2>
+          <p>
+            {conditions?.temperature_f != null
+              ? `${Math.round(conditions.temperature_f)}°F` +
+                (conditions.feels_like_f != null
+                  ? `, feels like ${Math.round(conditions.feels_like_f)}°F`
+                  : "") +
+                (conditions.description ? ` · ${conditions.description}` : "")
+              : "Current conditions not available yet."}
+          </p>
+          <p className="muted">
+            {weather
+              ? `${weather.event} in effect${weather.source === "simulated" ? " (simulated)" : ""}.`
+              : "No heat or cold advisories right now."}
+          </p>
+        </div>
+        {!picking && (
+          <button className="secondary" onClick={() => setPicking(true)}>
+            Change location
+          </button>
+        )}
+      </div>
+      {picking && (
+        <LocationPicker
+          onPicked={() => {
+            setPicking(false);
+            onChange();
+          }}
+          onCancel={() => setPicking(false)}
+        />
+      )}
+      <div className="demo-buttons weather-simulate">
+        {weather?.source === "simulated" ? (
+          <button onClick={() => simulate(null)}>End simulated advisory</button>
+        ) : (
+          <>
+            <button className="secondary" disabled={real} onClick={() => simulate("heat")}>
+              ☀ Simulate heat advisory
+            </button>
+            <button className="secondary" disabled={real} onClick={() => simulate("cold")}>
+              ❄ Simulate cold advisory
+            </button>
+          </>
+        )}
+        {real && <small>A real advisory is in effect, so simulation is off.</small>}
+        {error && <small role="alert">{error}</small>}
+      </div>
+    </section>
+  );
+}
+
 function clockTime(hhmm: string) {
   const [hours, minutes] = hhmm.split(":").map(Number);
   const suffix = hours < 12 ? "AM" : "PM";
   return `${hours % 12 || 12}:${String(minutes).padStart(2, "0")} ${suffix}`;
 }
 
-function MorningCheckin({ data }: { data: CommunityResponse }) {
+function Checkin({ data }: { data: CommunityResponse }) {
   const byId = new Map(data.units.map((u) => [u.resident_id, u]));
   const quiet = data.checkin.resident_ids.flatMap((id) => byId.get(id) ?? []);
+  const weather = data.checkin.reason === "weather" ? data.weather : null;
+  const span = weather
+    ? `No movement in the last ${hoursText(weather.watch_after_minutes)}`
+    : `No movement since ${clockTime(data.checkin.time)}`;
   return (
     <section className="panel staff-panel" aria-labelledby="morning-checkin">
-      <h2 id="morning-checkin">Morning check-in</h2>
-      <p className="muted">
-        No movement since {clockTime(data.checkin.time)}, longest first. Call or visit these
-        residents.
-      </p>
-      {!quiet.length && <p>Everyone has moved since {clockTime(data.checkin.time)}.</p>}
+      <h2 id="morning-checkin">
+        {weather ? `${KIND_LABEL[weather.kind]} check-in` : "Morning check-in"}
+      </h2>
+      <p className="muted">{span}, longest first. Call or visit these residents.</p>
+      {!quiet.length && <p>Nobody is on the list right now.</p>}
       <ol className="staff-list checkin-list">
         {quiet.map((u) => (
           <li key={u.resident_id} className="staff-row">
@@ -429,6 +635,8 @@ export default function CommunityPage() {
           {error} · Displayed data may be out of date.
         </p>
       )}
+      {data?.weather && <WeatherBanner weather={data.weather} />}
+      {data && <WeatherPanel data={data} onChange={refresh} />}
       {data && <ResponseStats stats={data.response_times} label="Staff response times" />}
       <div className="grid-toolbar">
         <ul className="grid-legend" aria-label="Apartment states">
@@ -455,7 +663,7 @@ export default function CommunityPage() {
             </span>
           </li>
         </ul>
-        <DemoControls onReset={refresh} />
+        <DemoControls onChange={refresh} />
       </div>
       <section className="housing-grid" aria-label="Apartments by floor">
         {data &&
@@ -475,7 +683,7 @@ export default function CommunityPage() {
       {data && (
         <div className="staff-panels">
           <OpenAlerts data={data} onDone={refresh} />
-          <MorningCheckin data={data} />
+          <Checkin data={data} />
         </div>
       )}
       {data && (

@@ -2231,3 +2231,85 @@ footer {
 .table-scroll {
   overflow-x: auto;
 }
+
+/* Weather advisory banner (Community.tsx WeatherBanner). Icon and words, not color alone. */
+.weather-banner {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+  padding: 16px 18px;
+  margin-bottom: 22px;
+  border-radius: 16px;
+  border: 2px solid var(--weather-edge);
+  background: var(--weather-bg);
+  color: var(--weather-ink);
+}
+.weather-heat {
+  --weather-edge: #d9771f;
+  --weather-bg: #fff0e0;
+  --weather-ink: #6b3300;
+}
+.weather-cold {
+  --weather-edge: #3f7fbf;
+  --weather-bg: #e6f1fb;
+  --weather-ink: #163f66;
+}
+.weather-icon {
+  font-size: 28px;
+  line-height: 1;
+}
+.weather-banner p {
+  margin: 4px 0;
+  font-size: 14px;
+}
+.weather-banner small {
+  opacity: 0.8;
+}
+
+/* Weather panel: location, current conditions, simulation (Community.tsx WeatherPanel). */
+.weather-panel {
+  margin-bottom: 22px;
+}
+.weather-summary {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+.weather-summary h2 {
+  margin: 0 0 4px;
+}
+.weather-summary p {
+  margin: 2px 0;
+}
+.weather-simulate {
+  justify-content: flex-start;
+  align-items: center;
+  margin-top: 14px;
+}
+.location-picker {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+.location-search {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 10px;
+}
+.location-search label {
+  margin: 0;
+  flex: 1 1 220px;
+}
+.place-results {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}

@@ -49,6 +49,16 @@ SESSION_HOURS = float(os.getenv("SESSION_HOURS", "12"))
 # The contract keeps dashboard endpoints open for the hackathon: without a login token they
 # answer as before. AUTH_REQUIRED=true makes them reject requests that have no token.
 AUTH_REQUIRED = os.getenv("AUTH_REQUIRED", "false").lower() == "true"
+# Weather-aware check-ins: heat and cold advisories from the National Weather Service
+# (api.weather.gov, free, no key) tighten a community's thresholds while they last.
+# WEATHER_ENABLED=false skips the lookups (tests, offline demos); simulated advisories still work.
+WEATHER_ENABLED = os.getenv("WEATHER_ENABLED", "true").lower() != "false"
+WEATHER_REFRESH_SECONDS = float(os.getenv("WEATHER_REFRESH_SECONDS", "900"))
+# The NWS asks every client to identify itself with a contact in the User-Agent.
+WEATHER_USER_AGENT = os.getenv("WEATHER_USER_AGENT", "StillHere (HackGT demo)")
+# During an advisory, grid thresholds are multiplied by this (4h/8h becomes 2h/4h).
+WEATHER_THRESHOLD_FACTOR = float(os.getenv("WEATHER_THRESHOLD_FACTOR", "0.5"))
+
 # Seeds the demo community (Maple Grove Senior Living) with invented residents and accounts.
 SEED_DEMO_COMMUNITY = os.getenv("SEED_DEMO_COMMUNITY", "true").lower() != "false"
 # Password for the seeded demo accounts. They hold invented data only.

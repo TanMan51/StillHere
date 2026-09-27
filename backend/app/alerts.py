@@ -13,7 +13,7 @@ import logging
 from sqlmodel import Session, col, select
 
 from . import clock, config, messages, routine, routing
-from .models import Alert, Device, Event
+from .models import Alert, Device, Event, Resident
 from .serialize import device_baseline, is_online
 
 log = logging.getLogger("stillhere.alerts")
@@ -21,6 +21,12 @@ log = logging.getLogger("stillhere.alerts")
 # Loud sounds and falls are ignored while a more serious state is already active.
 REPLY_FLOW_STARTS_FROM = {"ok", "inactive_alert", "awaiting_reply"}
 MOTION_CLEARS = {"inactive_alert", "no_reply_alert"}
+
+
+def person(session: Session, device: Device) -> str:
+    """How texts name the person a device follows: the resident's first name."""
+    resident = session.get(Resident, device.resident_id) if device.resident_id else None
+    return resident.first_name if resident else "your family member"
 
 
 def set_status(device: Device, status: str) -> None:
@@ -101,7 +107,12 @@ def handle_event(session: Session, device: Device, event: Event) -> None:
         if device.status in MOTION_CLEARS:
             resolve_open_alerts(session, device, "motion")
             _log_resolved(
-                session, device, "all_clear", messages.all_clear(device.name), "motion", True
+                session,
+                device,
+                "all_clear",
+                messages.all_clear(device.name, person(session, device)),
+                "motion",
+                True,
             )
             set_status(device, "ok")
     elif event.type == "loud" and not device.sound_enabled:
@@ -118,7 +129,9 @@ def _handle_reply(session: Session, device: Device, value: str | None) -> None:
     if value == "help":
         if device.status != "urgent":
             resolve_open_alerts(session, device, "reply")
-            raise_alert(session, device, "urgent", messages.urgent(device.name))
+            raise_alert(
+                session, device, "urgent", messages.urgent(device.name, person(session, device))
+            )
             device.reply_deadline_real = None
             set_status(device, "urgent")
         return
@@ -128,7 +141,9 @@ def _handle_reply(session: Session, device: Device, value: str | None) -> None:
             session,
             device,
             "false_alarm",
-            messages.false_alarm(device.name, reply_trigger(session, device)),
+            messages.false_alarm(
+                device.name, person(session, device), reply_trigger(session, device)
+            ),
             "reply",
             False,
         )
@@ -136,7 +151,14 @@ def _handle_reply(session: Session, device: Device, value: str | None) -> None:
         set_status(device, "ok")
     elif device.status == "no_reply_alert":
         resolve_open_alerts(session, device, "reply")
-        _log_resolved(session, device, "all_clear", messages.all_clear(device.name), "reply", True)
+        _log_resolved(
+            session,
+            device,
+            "all_clear",
+            messages.all_clear(device.name, person(session, device)),
+            "reply",
+            True,
+        )
         set_status(device, "ok")
 
 
@@ -153,7 +175,9 @@ def check_device(session: Session, device: Device) -> None:
 
     deadline = clock.as_utc(device.reply_deadline_real)
     if device.status == "awaiting_reply" and deadline and real_now >= deadline:
-        message = messages.no_reply(device.name, reply_trigger(session, device))
+        message = messages.no_reply(
+            device.name, person(session, device), reply_trigger(session, device)
+        )
         raise_alert(session, device, "no_reply", message)
         device.reply_deadline_real = None
         set_status(device, "no_reply_alert")
@@ -170,6 +194,8 @@ def check_device(session: Session, device: Device) -> None:
         )
         if verdict.irregular:
             log.info("%s: irregular (%s)", device.id, verdict.reason)
-            message = messages.inactivity(device.name, last_motion, verdict.note)
+            message = messages.inactivity(
+                device.name, last_motion, person(session, device), verdict.note
+            )
             raise_alert(session, device, "inactivity", message)
             set_status(device, "inactive_alert")

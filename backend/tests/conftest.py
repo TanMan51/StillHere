@@ -4,6 +4,7 @@ import os
 import tempfile
 
 os.environ["CHECKER_ENABLED"] = "false"  # tests call checker.check_all() directly
+os.environ["WEATHER_ENABLED"] = "false"  # tests never call the real weather service
 os.environ["DATABASE_URL"] = f"sqlite:///{tempfile.mkdtemp()}/test.db"
 for key in (
     "TWILIO_ACCOUNT_SID",

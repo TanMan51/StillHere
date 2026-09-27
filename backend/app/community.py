@@ -13,7 +13,7 @@ from zoneinfo import ZoneInfo
 
 from sqlmodel import Session, col, select
 
-from . import clock, config, routine
+from . import clock, config, routine, weather
 from .models import Alert, Community, Device, Event, Resident
 from .routing import URGENT_KINDS
 from .serialize import active_alert, alert_dict, is_online
@@ -70,7 +70,8 @@ def resident_cell(session: Session, community: Community, resident: Resident) ->
         key=lambda a: (a.kind not in URGENT_KINDS, -clock.as_utc(a.sent_at).timestamp()),
     )
     alert = alerts[0] if alerts else None
-    minutes = (now - last_motion).total_seconds() / 60 if last_motion else None
+    # Never negative: events stamped by a fast demo clock can sit ahead of real time.
+    minutes = max(0.0, (now - last_motion).total_seconds() / 60) if last_motion else None
     last_event = session.exec(
         select(Event)
         .where(col(Event.device_id).in_([d.id for d in devices]), Event.type != "heartbeat")
@@ -93,8 +94,7 @@ def resident_cell(session: Session, community: Community, resident: Resident) ->
             minutes,
             online,
             alert is not None and alert.kind in URGENT_KINDS,
-            community.watch_after_minutes,
-            community.worry_after_minutes,
+            *weather.thresholds(community),
         ),
         "minutes_since_motion": round(minutes) if minutes is not None else None,
         "last_motion_at": clock.iso(last_motion),
@@ -121,6 +121,9 @@ def community_dict(community: Community) -> dict:
         "on_call_phone": community.on_call_phone,
         "escalate_after_minutes": community.escalate_after_minutes,
         "checkin_time": community.checkin_time,
+        "latitude": community.latitude,
+        "longitude": community.longitude,
+        "location_name": community.location_name,
     }
 
 
@@ -137,8 +140,16 @@ def checkin_since(checkin_time: str, now: datetime, timezone: str) -> datetime:
 
 
 def checkin_list(community: Community, units: list[dict]) -> dict:
-    """Residents with no movement since the check-in time, longest inactivity first."""
-    since = checkin_since(community.checkin_time, clock.now(), config.HOUSEHOLD_TZ)
+    """Residents to call or visit, longest inactivity first: no movement since the morning
+    check-in time, or during a heat or cold advisory, quiet past the tightened watch threshold."""
+    now = clock.now()
+    if weather.active(community):
+        watch, _ = weather.thresholds(community)
+        since = now - timedelta(minutes=watch)
+        reason = "weather"
+    else:
+        since = checkin_since(community.checkin_time, now, config.HOUSEHOLD_TZ)
+        reason = "morning"
     quiet = [
         u
         for u in units
@@ -149,6 +160,7 @@ def checkin_list(community: Community, units: list[dict]) -> dict:
     return {
         "time": community.checkin_time,
         "since": clock.iso(since),
+        "reason": reason,
         "resident_ids": [u["resident_id"] for u in quiet],
     }
 

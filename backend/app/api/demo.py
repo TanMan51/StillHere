@@ -36,11 +36,16 @@ def get_demo():
 
 
 @router.post("/demo")
-def set_demo(body: DemoIn):
+def set_demo(body: DemoIn, session: Session = Depends(get_session)):
     if body.enabled:
         clock.enable(body.time_scale, body.start_clock_at)
     else:
+        was_fast = clock.enabled()
         clock.disable()
+        # A fast clock leaves the simulated apartments' history ahead of real time; start them
+        # over from real now so the grid keeps its mix instead of reading "just moved".
+        if was_fast and config.SEED_DEMO_COMMUNITY:
+            demo_community.reseed_simulated(session)
     return demo_dict()
 
 

@@ -20,6 +20,23 @@ class Community(SQLModel, table=True):
     escalate_after_minutes: int = 10
     # Morning check-in list: residents with no movement since this local time ("HH:MM").
     checkin_time: str = "10:00"
+    # Where to look up weather advisories, and a readable name for it ("Atlanta, GA").
+    latitude: float | None = None
+    longitude: float | None = None
+    location_name: str | None = None
+    # Current conditions from Open-Meteo, refreshed with the advisories.
+    weather_temp_f: float | None = None
+    weather_feels_f: float | None = None
+    weather_conditions: str | None = None
+    weather_observed_at: datetime | None = None
+    # The current heat or cold advisory, if any (weather.py). source: "nws" or "simulated".
+    weather_id: str | None = None
+    weather_event: str | None = None
+    weather_headline: str | None = None
+    weather_ends_at: datetime | None = None
+    weather_source: str | None = None
+    # Internal, real time: when the NWS was last asked.
+    weather_checked_real: datetime | None = None
 
 
 class Resident(SQLModel, table=True):
@@ -101,3 +118,12 @@ class Contact(SQLModel, table=True):
     # The resident this family contact follows. Null: every alert, as before accounts existed.
     resident_id: str | None = Field(default=None, foreign_key="resident.id", index=True)
     created_at: datetime
+
+
+class WeatherNotice(SQLModel, table=True):
+    """One family text per resident per advisory, so a long advisory never repeats itself."""
+
+    id: int | None = Field(default=None, primary_key=True)
+    resident_id: str = Field(foreign_key="resident.id", index=True)
+    weather_id: str = Field(index=True)
+    sent_at: datetime

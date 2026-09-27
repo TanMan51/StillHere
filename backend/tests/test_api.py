@@ -782,3 +782,205 @@ def test_resident_summary_for_visit(client):
         assert mine["trend"] is None
     finally:
         client.patch("/api/residents/mg-204", json={"share_activity_with_family": True})
+
+
+# --- Weather-aware check-ins ---
+
+CONDITIONS_SAMPLE = {
+    "temperature_f": 97.0,
+    "feels_like_f": 104.0,
+    "description": "Clear",
+    "observed_at": None,
+}
+
+NWS_SAMPLE = [
+    {"properties": {"id": "urn:flood", "event": "Flood Watch", "headline": "Flood Watch"}},
+    {
+        "id": "https://api.weather.gov/alerts/urn:heat",
+        "properties": {
+            "id": "urn:heat",
+            "event": "Heat Advisory",
+            "headline": "Heat Advisory issued September 26 until 8:00PM EDT",
+            "ends": "2099-09-26T20:00:00-04:00",
+        },
+    },
+]
+
+
+def test_pick_advisory_keeps_heat_and_cold_only():
+    from app.weather import pick_advisory
+
+    advisory = pick_advisory(NWS_SAMPLE)
+    assert advisory["event"] == "Heat Advisory" and advisory["id"] == "urn:heat"
+    assert advisory["ends_at"].isoformat() == "2099-09-27T00:00:00+00:00"
+    assert pick_advisory(NWS_SAMPLE[:1]) is None  # a flood watch doesn't count
+
+
+@pytest.fixture()
+def heat(client):
+    staff = _login(client, PROVIDER)
+    yield staff
+    client.post("/api/community/weather/simulate", json={"kind": None}, headers=staff)
+
+
+def test_nws_refresh_tightens_thresholds_and_checkin(client, monkeypatch, heat):
+    from app import weather
+    from app.db import engine
+    from sqlmodel import Session
+
+    monkeypatch.setattr(weather, "fetch_features", lambda lat, lon: NWS_SAMPLE)
+    monkeypatch.setattr(weather, "fetch_conditions", lambda lat, lon: CONDITIONS_SAMPLE)
+    with Session(engine) as session:
+        weather.refresh(session)
+        session.commit()
+    try:
+        body = client.get("/api/community", headers=heat).json()
+        assert body["weather"]["event"] == "Heat Advisory" and body["weather"]["source"] == "nws"
+        assert (body["weather"]["watch_after_minutes"], body["weather"]["worry_after_minutes"]) == (
+            120,
+            240,
+        )
+        units = {u["unit"]: u for u in body["units"]}
+        assert units["103"]["state"] == "worry"  # 5h quiet: yellow normally, red during heat
+        assert body["checkin"]["reason"] == "weather"
+        assert "mg-103" in body["checkin"]["resident_ids"]
+    finally:
+        monkeypatch.setattr(weather, "fetch_features", lambda lat, lon: [])
+        with Session(engine) as session:
+            weather.refresh(session)
+            session.commit()
+    assert client.get("/api/community", headers=heat).json()["weather"] is None
+
+
+def test_simulated_heat_texts_family_once_for_real_sensors_only(client, monkeypatch, heat):
+    from app import checker
+
+    sent = _texts(monkeypatch)
+    client.post("/api/contacts", json={"name": "Sam", "phone": "+14045550123"})
+    _event(client, {"type": "heartbeat"})  # Rosa's sensor is online but hasn't moved
+    res = client.post("/api/community/weather/simulate", json={"kind": "heat"}, headers=heat)
+    assert res.json()["weather"]["source"] == "simulated"
+    checker.check_all()
+    checker.check_all()  # a second pass must not text again
+    assert len(sent) == 1  # only Rosa (real sensor); 23 simulated apartments stay silent
+    to, body = sent[0]
+    assert to == "+14045550123"
+    assert body.startswith("StillHere: Heat Advisory in effect. Rosa's apartment")
+
+
+def test_simulate_weather_is_for_staff(client):
+    family = _login(client, FAMILY)
+    res = client.post("/api/community/weather/simulate", json={"kind": "heat"}, headers=family)
+    assert res.status_code == 403
+
+
+def test_reset_during_fast_demo_then_turning_it_off_keeps_the_mix(client):
+    import time
+
+    client.post("/api/demo", json={"enabled": True, "time_scale": 3600 * 24})
+    time.sleep(0.2)  # the fast clock runs hours ahead of real time
+    client.post("/api/demo/reset")
+    client.post("/api/demo", json={"enabled": False})
+    units = _grid(client)
+    assert all((u["minutes_since_motion"] or 0) >= 0 for u in units.values())
+    assert units["106"]["state"] == "worry" and units["103"]["state"] == "watch"
+
+
+def test_conditions_are_read_from_open_meteo(monkeypatch):
+    from app import weather
+
+    sample = {
+        "current": {
+            "time": "2026-09-26T18:00",
+            "temperature_2m": 97.2,
+            "apparent_temperature": 104.5,
+            "weather_code": 2,
+        }
+    }
+    monkeypatch.setattr(weather, "_get_json", lambda *a, **k: sample)
+    now = weather.fetch_conditions(33.77, -84.39)
+    assert (now["temperature_f"], now["feels_like_f"], now["description"]) == (
+        97.2,
+        104.5,
+        "Partly cloudy",
+    )
+    assert now["observed_at"].isoformat() == "2026-09-26T18:00:00+00:00"
+
+
+def test_community_shows_conditions_after_refresh(client, monkeypatch, heat):
+    from app import weather
+    from app.db import engine
+    from sqlmodel import Session
+
+    monkeypatch.setattr(weather, "fetch_features", lambda lat, lon: [])
+    monkeypatch.setattr(weather, "fetch_conditions", lambda lat, lon: CONDITIONS_SAMPLE)
+    with Session(engine) as session:
+        weather.refresh(session)
+        session.commit()
+    body = client.get("/api/community", headers=heat).json()
+    assert body["conditions"]["temperature_f"] == 97.0
+    assert body["community"]["location_name"] == "Atlanta, GA"
+
+
+def test_city_search_and_choosing_a_location(client, monkeypatch, heat):
+    from app import weather
+
+    decatur = {"name": "Decatur, Georgia", "latitude": 33.7748, "longitude": -84.2963}
+    monkeypatch.setattr(weather, "search_places", lambda query: [decatur])
+    assert client.get("/api/places?query=Decatur", headers=heat).json() == [decatur]
+    assert client.get("/api/places?query=D", headers=heat).status_code == 422
+    family = _login(client, FAMILY)
+    assert client.get("/api/places?query=Decatur", headers=family).status_code == 403
+    try:
+        res = client.patch(
+            "/api/community",
+            json={"latitude": 33.7748, "longitude": -84.2963, "location_name": "Decatur, Georgia"},
+            headers=heat,
+        )
+        assert res.json()["location_name"] == "Decatur, Georgia"
+        # Coordinates alone (from "Use my current location") still get a readable name.
+        monkeypatch.setattr(config, "WEATHER_ENABLED", True)
+        monkeypatch.setattr(weather, "place_name", lambda lat, lon: "Macon, GA")
+        monkeypatch.setattr(weather, "refresh_community", lambda community: None)
+        res = client.patch(
+            "/api/community", json={"latitude": 32.84, "longitude": -83.63}, headers=heat
+        )
+        assert res.json()["location_name"] == "Macon, GA"
+    finally:
+        client.patch(
+            "/api/community",
+            json={"latitude": 33.7756, "longitude": -84.3963, "location_name": "Atlanta, GA"},
+            headers=heat,
+        )
+
+
+def test_texts_name_the_resident_not_mom(client, monkeypatch):
+    sent = _texts(monkeypatch)
+    client.post("/api/contacts", json={"name": "Sam", "phone": "+14045550123"})
+    assert _fridge(client)["name"] == "Rosa's fridge"
+    _event(client, {"type": "reply", "value": "help"})
+    assert (
+        sent[-1][1]
+        == "URGENT from StillHere: Rosa asked for help near Rosa's fridge. Please call now."
+    )
+    assert "Mom" not in sent[-1][1]
+
+
+def test_saved_alerts_lose_the_old_family_name():
+    from app import demo_community
+    from app.db import engine
+    from app.models import Alert
+    from sqlmodel import Session
+
+    with Session(engine) as session:
+        old = Alert(
+            device_id="fridge-1",
+            kind="offline",
+            message="StillHere: Mom's fridge sensor is offline.",
+            sent_at=clock.now(),
+        )
+        session.add(old)
+        session.commit()
+        demo_community.ensure(session)
+        session.refresh(old)
+        assert old.message == "StillHere: Rosa's fridge sensor is offline."

@@ -1,6 +1,6 @@
 """The demo community, Maple Grove Senior Living, and its demo accounts. Owner: Person A.
 
-Everything here is invented: no real people, apartments, or health data. Mom (unit 204) owns
+Everything here is invented: no real people, apartments, or health data. Rosa (unit 204) owns
 the real hardware devices from config, so live movement from the sensor shows up in the
 community views. Every other apartment gets a simulated device with no hardware.
 """
@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from datetime import timedelta
 
-from sqlmodel import Session, select
+from sqlmodel import Session, col, delete, select
 
 from . import clock, config, messages, passwords, routine
 from .models import Alert, Community, Device, Event, Resident, User
@@ -19,6 +19,7 @@ COMMUNITY_NAME = "Maple Grove Senior Living"
 FLOORS = 3
 UNITS_PER_FLOOR = 8
 REAL_DEVICE_UNIT = "204"
+ATLANTA = (33.7756, -84.3963)
 # The family account keeps the original demo login so the caregiver flow is unchanged.
 FAMILY_EMAIL = "demo@stillhere.example"
 PROVIDER_EMAIL = "staff@maplegrove.example"
@@ -89,8 +90,15 @@ def units() -> list[tuple[int, str]]:
 
 def ensure(session: Session) -> None:
     """Create whatever part of the demo community is missing. Safe to run on every start."""
-    if session.get(Community, COMMUNITY_ID) is None:
-        session.add(Community(id=COMMUNITY_ID, name=COMMUNITY_NAME))
+    community = session.get(Community, COMMUNITY_ID)
+    if community is None:
+        community = Community(id=COMMUNITY_ID, name=COMMUNITY_NAME)
+    if community.latitude is None:
+        # An invented community placed in Atlanta, so weather advisories are real ones.
+        community.latitude, community.longitude = ATLANTA
+    if community.location_name is None:
+        community.location_name = "Atlanta, GA"
+    session.add(community)
     for (floor, unit), (first, last) in zip(units(), NAMES, strict=True):
         resident_id = f"mg-{unit}"
         if session.get(Resident, resident_id) is None:
@@ -123,9 +131,24 @@ def ensure(session: Session) -> None:
     real_resident = f"mg-{REAL_DEVICE_UNIT}"
     for d in config.DEVICES:
         device = session.get(Device, d["id"])
-        if device is not None and device.resident_id is None:
+        if device is None:
+            continue
+        if device.resident_id is None:
             device.resident_id = real_resident
-            session.add(device)
+        # The real sensors carry family-era names ("Mom's fridge"); name them for Rosa instead,
+        # along with alerts already saved under the old name.
+        family_prefix = "Mom's "
+        owner = session.get(Resident, real_resident)
+        if device.resident_id == real_resident and owner is not None:
+            if device.name.startswith(family_prefix):
+                object_name = device.name.removeprefix(family_prefix)
+                device.name = f"{owner.first_name}'s {object_name}"
+            renamed = f"{owner.first_name}'s "
+            for alert in session.exec(select(Alert).where(Alert.device_id == device.id)).all():
+                if family_prefix in alert.message:
+                    alert.message = alert.message.replace(family_prefix, renamed)
+                    session.add(alert)
+        session.add(device)
 
     existing = set(session.exec(select(User.email)).all())
     if FAMILY_EMAIL not in existing:
@@ -242,3 +265,12 @@ def _seed_past_alert(session: Session, device: Device, resident: Resident, unit:
 def index_hour(unit: str) -> int:
     """A stable hour offset per apartment, so past alerts don't all share a time of day."""
     return int(unit) % 9 + 2
+
+
+def reseed_simulated(session: Session) -> None:
+    """Clear the simulated apartments' events and alerts and seed them again from now."""
+    ids = list(session.exec(select(Device.id).where(Device.simulated == True)))  # noqa: E712
+    session.exec(delete(Event).where(col(Event.device_id).in_(ids)))
+    session.exec(delete(Alert).where(col(Alert.device_id).in_(ids)))
+    session.commit()
+    seed_states(session)

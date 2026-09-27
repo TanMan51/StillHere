@@ -228,20 +228,50 @@ alerts in a community with an on-call phone), `device_ids` ([string]).
 Both endpoints need a provider token: `401` without a login, `403` for family caregivers.
 
 - `GET /api/community` → `{"server_now": timestamp, "community": Community, "units": [Unit],
-"checkin": Checkin, "response_times": ResponseTimes}`, units by floor then unit (see
+"checkin": Checkin, "weather": Weather or null, "conditions": Conditions or null,
+"response_times": ResponseTimes}`, units by
+  floor then unit (see
   `fixtures/community.json`, which shows one unit per state).
 - `PATCH /api/community`, body (all optional) `{"watch_after_minutes": integer 1–10080,
 "worry_after_minutes": integer 1–10080, "on_call_phone": E.164 string or "" to clear,
-"escalate_after_minutes": integer 1–240, "checkin_time": "HH:MM"}` → Community. `422` unless
+"escalate_after_minutes": integer 1–240, "checkin_time": "HH:MM", "latitude": number,
+"longitude": number, "location_name": string}` → Community. Latitude and longitude change
+  together; without `location_name`, the server names the place ("Macon, GA") from the
+  coordinates, and it checks the new location's weather right away. `422` unless
   watch comes before worry.
 
 **Community object:** `id`, `name`, `watch_after_minutes` (default 240), `worry_after_minutes`
 (default 480), `on_call_phone` (string or null), `escalate_after_minutes` (default 10),
-`checkin_time` (local `"HH:MM"`, default `"10:00"`).
+`checkin_time` (local `"HH:MM"`, default `"10:00"`), `latitude` and `longitude` (numbers or
+null: where weather advisories are looked up), `location_name` (string or null, e.g.
+`"Atlanta, GA"`).
 
-**Checkin object** (the morning check-in list): `time` (`"HH:MM"`), `since` (timestamp: the
-latest occurrence of that local time, today's once it has passed, otherwise yesterday's),
-`resident_ids` ([string]: residents with no movement since then, longest inactivity first).
+**Checkin object** (who to call or visit): `time` (`"HH:MM"`), `reason` (`"morning"` or
+`"weather"`), `since` (timestamp), `resident_ids` ([string]: residents with no movement
+since then, longest inactivity first). Normally `since` is the latest occurrence of the local
+check-in time (today's once it has passed, otherwise yesterday's). During a weather advisory
+the reason is `"weather"` and `since` is now minus the tightened watch threshold.
+
+**Weather object** (a heat or cold advisory in effect, else `null`): `id`, `event` (the NWS
+event, e.g. `"Heat Advisory"`), `kind` (`"heat"` or `"cold"`), `headline` (string or null),
+`ends_at` (timestamp or null), `source` (`"nws"` or `"simulated"`), `watch_after_minutes` and
+`worry_after_minutes` (the tightened thresholds the grid is using). Advisories come from the
+National Weather Service (api.weather.gov) every 15 minutes. While one is in effect, grid
+thresholds are halved and each quiet resident with a real, online sensor has their family
+texted once: "StillHere: Heat Advisory in effect. Rosa's apartment has been quiet since
+11:05 AM. You may want to check in."
+
+**Conditions object** (current weather from Open-Meteo, refreshed with the advisories):
+`temperature_f` and `feels_like_f` (numbers or null), `description` (string or null, e.g.
+`"Partly cloudy"`), `observed_at` (timestamp or null).
+
+- `GET /api/places?query=string` → `[{"name": string, "latitude": number, "longitude":
+number}]`, up to 6 US cities and towns matching the query (e.g. `"Decatur, Georgia"`), for
+  choosing the community's location. `422` for fewer than 2 letters, `502` when the search
+  service is down. Provider token only.
+- `POST /api/community/weather/simulate`, body `{"kind": "heat" | "cold" | null}` →
+  `{"weather": Weather or null}`. Demo control: starts a 6-hour simulated advisory, or clears
+  it (`null`). Provider token only.
 
 **ResponseTimes object:** `alerts` (integer, alerts in the last 30 days), `acknowledged`
 (integer), `average_acknowledge_seconds` (integer or null: sent to "I'm on it"),
@@ -350,3 +380,13 @@ Wording lives in `backend/app/messages.py`. These are examples, not a fixed form
 - Add accounts and roles: `POST /api/auth/login`, `GET /api/auth/me`, optional bearer tokens
   on dashboard endpoints, `GET/PATCH /api/residents`, and `resident_id` on Device.
 - Add the community housing grid: `GET/PATCH /api/community`.
+- Add staff alert handling and community views: `POST /api/alerts/{id}/acknowledge`,
+  `acknowledged_at`/`acknowledged_by`/`escalation_level` and `resolved_by: "staff"` on Alert,
+  on-call routing and escalation, community `on_call_phone`/`escalate_after_minutes`/
+  `checkin_time`, `checkin` and `response_times` on `GET /api/community`,
+  `activity_lower_than_usual` on Unit, `family_notify` on Resident, `resident_id` on Contact,
+  and `GET /api/residents/{id}/summary`.
+- Add weather-aware check-ins: `weather` on `GET /api/community`, `reason` on Checkin,
+  community `latitude`/`longitude`, and `POST /api/community/weather/simulate`.
+- Add weather location and conditions: community `location_name`, `conditions` on
+  `GET /api/community`, and `GET /api/places`.

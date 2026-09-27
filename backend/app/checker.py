@@ -8,11 +8,12 @@ stop the loop.
 from __future__ import annotations
 
 import logging
+from datetime import datetime
 
 from apscheduler.schedulers.background import BackgroundScheduler
 from sqlmodel import Session, col, select
 
-from . import alerts, clock, config, routing
+from . import alerts, clock, config, routing, weather
 from .db import engine
 from .models import Device
 
@@ -44,8 +45,23 @@ def escalate_alerts() -> None:
         session.commit()
 
 
+def weather_texts() -> None:
+    with Session(engine) as session:
+        weather.notify_quiet(session)
+        session.commit()
+
+
+def refresh_weather() -> None:
+    try:
+        with Session(engine) as session:
+            weather.refresh(session)
+            session.commit()
+    except Exception:
+        log.exception("weather refresh failed")
+
+
 def check_all() -> None:
-    for step in (heartbeat_simulated, escalate_alerts):
+    for step in (heartbeat_simulated, escalate_alerts, weather_texts):
         try:
             step()
         except Exception:
@@ -77,6 +93,16 @@ def start() -> None:
         max_instances=1,
         coalesce=True,
     )
+    if config.WEATHER_ENABLED:
+        # Its own job, so a slow weather lookup never delays alert checks.
+        _scheduler.add_job(
+            refresh_weather,
+            "interval",
+            seconds=config.WEATHER_REFRESH_SECONDS,
+            next_run_time=datetime.now(),
+            max_instances=1,
+            coalesce=True,
+        )
     _scheduler.start()
     log.info("check loop running every %ss", config.CHECK_INTERVAL_SECONDS)
 

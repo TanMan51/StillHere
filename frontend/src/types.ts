@@ -108,6 +108,30 @@ export interface Community {
   on_call_phone: string | null;
   escalate_after_minutes: number;
   checkin_time: string;
+  latitude: number | null;
+  longitude: number | null;
+  location_name: string | null;
+}
+export interface Conditions {
+  temperature_f: number | null;
+  feels_like_f: number | null;
+  description: string | null;
+  observed_at: string | null;
+}
+export interface Place {
+  name: string;
+  latitude: number;
+  longitude: number;
+}
+export interface Weather {
+  id: string;
+  event: string;
+  kind: "heat" | "cold";
+  headline: string | null;
+  ends_at: string | null;
+  source: "nws" | "simulated";
+  watch_after_minutes: number;
+  worry_after_minutes: number;
 }
 export interface Unit {
   resident_id: string;
@@ -136,7 +160,14 @@ export interface CommunityResponse {
   server_now: string;
   community: Community;
   units: Unit[];
-  checkin: { time: string; since: string; resident_ids: string[] };
+  checkin: {
+    time: string;
+    reason: "morning" | "weather";
+    since: string;
+    resident_ids: string[];
+  };
+  weather: Weather | null;
+  conditions: Conditions | null;
   response_times: ResponseTimes;
 }
 export interface Trend {

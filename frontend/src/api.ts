@@ -10,9 +10,11 @@ import type {
   LoginResponse,
   MotionSensitivity,
   FamilyNotify,
+  Place,
   Resident,
   ResidentSummary,
   User,
+  Weather,
 } from "./types";
 import { LOGOUT_EVENT, loadSession, saveSession } from "./session";
 // Production uses the same-origin backend; local development defaults to fixtures.
@@ -68,6 +70,9 @@ export const api = {
   community: () => request<CommunityResponse>("/community"),
   updateCommunity: (body: Partial<Omit<Community, "id" | "name">>) =>
     request<Community>("/community", "PATCH", body),
+  places: (query: string) => request<Place[]>(`/places?query=${encodeURIComponent(query)}`),
+  simulateWeather: (kind: Weather["kind"] | null) =>
+    request<{ weather: Weather | null }>("/community/weather/simulate", "POST", { kind }),
   residentSummary: (id: string) =>
     request<ResidentSummary>(`/residents/${encodeURIComponent(id)}/summary`),
   acknowledge: (id: number) => request<Alert>(`/alerts/${id}/acknowledge`, "POST"),
