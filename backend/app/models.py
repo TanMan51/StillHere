@@ -52,6 +52,9 @@ class Resident(SQLModel, table=True):
     # When family hears about urgent alerts: "immediately" (with staff) or "if_unanswered"
     # (only when staff haven't acknowledged within the community's escalation window).
     family_notify: str = "immediately"
+    # The last time someone confirmed the resident is okay ("Mark as okay"), and who.
+    marked_okay_at: datetime | None = None
+    marked_okay_by: str | None = None
 
 
 class User(SQLModel, table=True):

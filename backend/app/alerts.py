@@ -67,10 +67,13 @@ def _log_resolved(session: Session, device: Device, kind: str, message: str, by:
     alert.resolved_by = by
 
 
-def record_check_in(session: Session, device: Device) -> None:
-    """A family check-in counts as activity: it restarts the inactivity countdown."""
+def record_check_in(session: Session, device: Device, value: str | None = None) -> None:
+    """A family check-in counts as activity: it restarts the inactivity countdown.
+
+    value tags the motion event: "check_in" when someone marked the resident okay.
+    """
     now = clock.now()
-    session.add(Event(device_id=device.id, type="motion", ts=now))
+    session.add(Event(device_id=device.id, type="motion", value=value, ts=now))
     device.last_motion_at = now
     log.info("%s: family check-in counted as activity", device.id)
 

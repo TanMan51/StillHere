@@ -57,15 +57,53 @@ export function eventText(unit: Unit, serverNow: string) {
   const event = unit.last_event;
   if (!event) return "None recorded";
   const label =
-    event.type === "reply" && event.value
-      ? `Reply: ${event.value.replaceAll("_", " ")}`
-      : (EVENT_LABELS[event.type] ?? event.type);
+    event.value === "check_in"
+      ? "Marked okay"
+      : event.type === "reply" && event.value
+        ? `Reply: ${event.value.replaceAll("_", " ")}`
+        : (EVENT_LABELS[event.type] ?? event.type);
   return `${label}, ${since(event.ts, serverNow)} ago`;
 }
 export function StateChip({ state }: { state: UnitState }) {
   return (
     <span className={`state-chip state-${state}`}>
       <span aria-hidden="true">{STATES[state].icon}</span> {STATES[state].label}
+    </span>
+  );
+}
+
+/** "They're okay": after a visit or call, restart the resident's countdown. */
+export function MarkOkay({
+  residentId,
+  name,
+  onDone,
+  compact = false,
+}: {
+  residentId: string;
+  name: string;
+  onDone: () => void;
+  compact?: boolean;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  async function mark() {
+    setBusy(true);
+    setError("");
+    try {
+      await api.markOkay(residentId);
+      onDone();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not mark okay");
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <span className="mark-okay">
+      <button className={compact ? "secondary" : ""} disabled={busy} onClick={mark}>
+        <span aria-hidden="true">✓</span> {compact ? "Okay" : `Mark ${name} as okay`}
+      </button>
+      {error && <small role="alert">{error}</small>}
     </span>
   );
 }
@@ -464,7 +502,7 @@ function clockTime(hhmm: string) {
   return `${hours % 12 || 12}:${String(minutes).padStart(2, "0")} ${suffix}`;
 }
 
-function Checkin({ data }: { data: CommunityResponse }) {
+function Checkin({ data, onDone }: { data: CommunityResponse; onDone: () => void }) {
   const byId = new Map(data.units.map((u) => [u.resident_id, u]));
   const quiet = data.checkin.resident_ids.flatMap((id) => byId.get(id) ?? []);
   const weather = data.checkin.reason === "weather" ? data.weather : null;
@@ -476,7 +514,9 @@ function Checkin({ data }: { data: CommunityResponse }) {
       <h2 id="morning-checkin">
         {weather ? `${KIND_LABEL[weather.kind]} check-in` : "Morning check-in"}
       </h2>
-      <p className="muted">{span}, longest first. Call or visit these residents.</p>
+      <p className="muted">
+        {span}, longest first. Call or visit these residents, then tap ✓ Okay once they’re fine.
+      </p>
       {!quiet.length && <p>Nobody is on the list right now.</p>}
       <ol className="staff-list checkin-list">
         {quiet.map((u) => (
@@ -486,6 +526,7 @@ function Checkin({ data }: { data: CommunityResponse }) {
               Apt {u.unit} · {u.first_name} {u.last_name}
             </Link>
             <span className="numeric">{elapsed(u.minutes_since_motion)}</span>
+            <MarkOkay residentId={u.resident_id} name={u.first_name} onDone={onDone} compact />
           </li>
         ))}
       </ol>
@@ -498,10 +539,26 @@ function CommunitySettings({ community, onSaved }: { community: Community; onSav
   const [worry, setWorry] = useState(String(community.worry_after_minutes / 60));
   const [onCall, setOnCall] = useState(community.on_call_phone ?? "");
   const [escalate, setEscalate] = useState(String(community.escalate_after_minutes));
-  const [checkin, setCheckin] = useState(community.checkin_time);
+  // The check-in time is stored as 24-hour "HH:MM" but edited as a 12-hour clock.
+  const [savedHour, savedMinute] = community.checkin_time.split(":").map(Number);
+  const [checkinHour, setCheckinHour] = useState(String(savedHour % 12 || 12));
+  const [checkinMinute, setCheckinMinute] = useState(String(savedMinute).padStart(2, "0"));
+  const [meridiem, setMeridiem] = useState(savedHour < 12 ? "AM" : "PM");
   const [message, setMessage] = useState("");
   async function save() {
     setMessage("");
+    const hour = Number(checkinHour);
+    const minute = Number(checkinMinute);
+    if (!Number.isInteger(hour) || hour < 1 || hour > 12) {
+      setMessage("Enter a check-in hour from 1 to 12.");
+      return;
+    }
+    if (!Number.isInteger(minute) || minute < 0 || minute > 59) {
+      setMessage("Enter check-in minutes from 0 to 59.");
+      return;
+    }
+    const hour24 = (hour % 12) + (meridiem === "PM" ? 12 : 0);
+    const checkin = `${String(hour24).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
     const watchMinutes = Math.round(Number(watch) * 60);
     const worryMinutes = Math.round(Number(worry) * 60);
     if (!(watchMinutes > 0 && worryMinutes > watchMinutes)) {
@@ -596,12 +653,39 @@ function CommunitySettings({ community, onSaved }: { community: Community; onSav
         </fieldset>
         <fieldset>
           <legend>Morning check-in</legend>
-          <div className="threshold-fields">
-            <label>
-              <span>List residents with no movement since</span>
-              <input type="time" value={checkin} onChange={(e) => setCheckin(e.target.value)} />
-            </label>
-          </div>
+          {/* Written like a clock: [10] : [00] [AM]. */}
+          <fieldset className="duration clock-time">
+            <legend>List residents with no movement since</legend>
+            <input
+              type="text"
+              inputMode="numeric"
+              maxLength={2}
+              aria-label="Check-in hour"
+              value={checkinHour}
+              onChange={(e) => setCheckinHour(e.target.value.replace(/\D/g, ""))}
+            />
+            <span className="clock-colon" aria-hidden="true">
+              :
+            </span>
+            <input
+              type="text"
+              inputMode="numeric"
+              maxLength={2}
+              aria-label="Check-in minutes"
+              value={checkinMinute}
+              onChange={(e) => setCheckinMinute(e.target.value.replace(/\D/g, ""))}
+              onBlur={() => checkinMinute && setCheckinMinute(checkinMinute.padStart(2, "0"))}
+            />
+            <select
+              className="meridiem"
+              aria-label="AM or PM"
+              value={meridiem}
+              onChange={(e) => setMeridiem(e.target.value)}
+            >
+              <option>AM</option>
+              <option>PM</option>
+            </select>
+          </fieldset>
         </fieldset>
       </div>
       <div className="settings-save">
@@ -683,7 +767,7 @@ export default function CommunityPage() {
       {data && (
         <div className="staff-panels">
           <OpenAlerts data={data} onDone={refresh} />
-          <Checkin data={data} />
+          <Checkin data={data} onDone={refresh} />
         </div>
       )}
       {data && (

@@ -94,6 +94,18 @@ export async function mockRequest(path: string, method: string, raw?: unknown): 
       user?.role === "family" ? residents.filter((r) => r.id === user.resident_id) : residents,
     );
   }
+  if (parts[0] === "residents" && parts[2] === "okay") {
+    const unit = community.units.find((u) => u.resident_id === decodeURIComponent(parts[1]));
+    if (unit) {
+      unit.state = "fine";
+      unit.minutes_since_motion = 0;
+      unit.last_event = { type: "motion", value: "check_in", ts: server_now };
+      community.checkin.resident_ids = community.checkin.resident_ids.filter(
+        (id) => id !== unit.resident_id,
+      );
+    }
+    return response({ ok: true });
+  }
   if (parts[0] === "residents" && parts[2] === "summary") {
     // Preview mode has one sample summary; it stands in for every resident.
     return response({ ...(summaryFixture as ResidentSummary), server_now });

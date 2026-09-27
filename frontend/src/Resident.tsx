@@ -8,6 +8,7 @@ import {
   elapsed,
   eventText,
   LOWER_ACTIVITY,
+  MarkOkay,
   ResponseStats,
   StateChip,
 } from "./Community";
@@ -188,6 +189,9 @@ export default function ResidentPage() {
   const { resident, unit } = data;
   return (
     <>
+      <Link className="back" to={staff ? "/community" : "/dashboard"}>
+        ← {staff ? "Back to community" : "Back to overview"}
+      </Link>
       <header className="page-heading">
         <div>
           <p className="eyebrow">
@@ -232,6 +236,17 @@ export default function ResidentPage() {
               </dd>
             </div>
           </dl>
+          <div className="okay-row">
+            <MarkOkay residentId={resident.id} name={resident.first_name} onDone={refresh} />
+            <small className="muted">
+              After a visit or call confirms {resident.first_name} is fine. Restarts the no-movement
+              timer.
+              {resident.marked_okay_at &&
+                ` Last marked okay by ${resident.marked_okay_by ?? "someone"}, ${elapsed(
+                  (Date.parse(data.server_now) - Date.parse(resident.marked_okay_at)) / 60000,
+                )} ago.`}
+            </small>
+          </div>
         </section>
       )}
       <div className="detail-grid">

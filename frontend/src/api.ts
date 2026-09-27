@@ -75,6 +75,8 @@ export const api = {
     request<{ weather: Weather | null }>("/community/weather/simulate", "POST", { kind }),
   residentSummary: (id: string) =>
     request<ResidentSummary>(`/residents/${encodeURIComponent(id)}/summary`),
+  markOkay: (residentId: string) =>
+    request<Resident>(`/residents/${encodeURIComponent(residentId)}/okay`, "POST"),
   acknowledge: (id: number) => request<Alert>(`/alerts/${id}/acknowledge`, "POST"),
   updateResident: (
     id: string,

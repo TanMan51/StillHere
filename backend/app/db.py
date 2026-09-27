@@ -47,6 +47,8 @@ _ADDED_COLUMNS = {
     },
     "resident": {
         "family_notify": "VARCHAR NOT NULL DEFAULT 'immediately'",
+        "marked_okay_at": "DATETIME",
+        "marked_okay_by": "VARCHAR",
     },
     "alert": {
         "acknowledged_at": "DATETIME",

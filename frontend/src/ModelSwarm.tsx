@@ -331,7 +331,24 @@ function sampleSurface(
 }
 
 /** Thousands of tiny sensors drifting in to form one big sensor behind the dashboard. */
-export default function ModelSwarm() {
+/**
+ * Where the big sensor sits behind the page. "backdrop": off to the right of the content.
+ * "center": the middle of the screen, for the community page, whose panels let it show through.
+ */
+export type SwarmPlacement = "backdrop" | "center";
+
+function layout(placement: SwarmPlacement, width: number, height: number) {
+  const wide = width > height * 1.2;
+  if (placement === "center")
+    return { centerX: width * 0.5, centerY: height * 0.55, scale: Math.min(width, height) * 0.32 };
+  return {
+    centerX: width * (wide ? 0.66 : 0.5),
+    centerY: height * 0.56,
+    scale: Math.min(width, height) * (wide ? 0.3 : 0.28),
+  };
+}
+
+export default function ModelSwarm({ placement = "backdrop" }: { placement?: SwarmPlacement }) {
   const canvas = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
@@ -349,8 +366,8 @@ export default function ModelSwarm() {
     function resize() {
       if (!element) return;
       const ratio = Math.min(2, window.devicePixelRatio || 1);
-      element.width = Math.round(window.innerWidth * ratio);
-      element.height = Math.round(window.innerHeight * ratio);
+      element.width = Math.round(element.clientWidth * ratio);
+      element.height = Math.round(element.clientHeight * ratio);
     }
 
     function draw(now: number) {
@@ -358,10 +375,7 @@ export default function ModelSwarm() {
       const elapsed = motion ? now - startedAt : Infinity;
       const width = element.width;
       const height = element.height;
-      const wide = width > height * 1.2;
-      const centerX = width * (wide ? 0.66 : 0.5);
-      const centerY = height * 0.56;
-      const scale = Math.min(width, height) * (wide ? 0.3 : 0.28);
+      const { centerX, centerY, scale } = layout(placement, width, height);
       pointer.x += (pointer.targetX - pointer.x) * 0.04;
       pointer.y += (pointer.targetY - pointer.y) * 0.04;
       const sway = motion ? Math.sin((now / SWAY_PERIOD_MS) * Math.PI * 2) * SWAY : 0;
@@ -372,10 +386,12 @@ export default function ModelSwarm() {
         const z1 = -x0 * sy + z0 * cy;
         return [x0 * cy + z0 * sy, y0 * cp - z1 * sp, y0 * sp + z1 * cp];
       };
-      const ratio = width / window.innerWidth;
+      // The mouse position in canvas pixels, wherever the canvas sits on the page.
+      const rect = element.getBoundingClientRect();
+      const ratio = rect.width ? width / rect.width : 1;
       const radius = scale * HOVER_RADIUS;
-      const pointerX = pointer.clientX * ratio;
-      const pointerY = pointer.clientY * ratio;
+      const pointerX = (pointer.clientX - rect.left) * ratio;
+      const pointerY = (pointer.clientY - rect.top) * ratio;
       const size = scale * TINY_SIZE;
       const out = renderer.instances;
 
@@ -480,9 +496,9 @@ export default function ModelSwarm() {
       window.removeEventListener("pointermove", follow);
       document.documentElement.removeEventListener("pointerleave", leave);
     };
-  }, []);
+  }, [placement]);
 
-  return <canvas ref={canvas} className="model-swarm" aria-hidden="true" />;
+  return <canvas ref={canvas} className={`model-swarm ${placement}`} aria-hidden="true" />;
 }
 
 /**

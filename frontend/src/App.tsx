@@ -886,9 +886,10 @@ export default function App() {
   if (isLanding || !session)
     return <LandingPage key={location.key} onLogin={login} loggedIn={session !== null} />;
   const { user } = session;
+  const onCommunity = location.pathname === "/community";
   return (
     <>
-      <ModelSwarm />
+      {!onCommunity && <ModelSwarm />}
       <header className="topbar">
         <Link className="brand" to="/">
           <img src="/icon.svg" alt="" />
@@ -924,6 +925,9 @@ export default function App() {
             : "application-layout"
         }
       >
+        {/* Centered behind the community page. It lives inside main so it draws above main's own
+            background layer; the page's panels are see-through enough to show it. */}
+        {onCommunity && <ModelSwarm placement="center" />}
         {/* Keyed so each page plays the enter transition. */}
         <div className="route-view" key={location.pathname}>
           <Routes>

@@ -382,6 +382,11 @@ nav a:hover {
   pointer-events: none;
   opacity: 0.55;
 }
+/* Community page: large panels let the centered swarm show through; apartment cells stay
+   solid so their state colors read clearly. */
+.application-layout:has(.housing-grid) .panel {
+  background: #ffffffd0;
+}
 main {
   position: relative;
   max-width: 1320px;
@@ -2312,4 +2317,188 @@ footer {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+}
+.duration .meridiem {
+  width: 96px;
+}
+.settings-groups .duration {
+  margin-top: 0;
+}
+.clock-time {
+  align-items: center;
+  gap: 8px;
+}
+.clock-time input {
+  width: 64px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.clock-colon {
+  font-size: 20px;
+  font-weight: 700;
+}
+.clock-time .meridiem {
+  margin-left: 6px;
+}
+.mark-okay {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.checkin-list .mark-okay button {
+  padding: 6px 14px;
+  font-size: 13px;
+}
+.okay-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 14px;
+  flex-basis: 100%;
+}
+
+/* Automatic placement ranking (PlacementGuide.tsx): ideas in, ranked cards with answer chips. */
+.idea-fields {
+  display: grid;
+  gap: 4px;
+}
+.idea-field {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr);
+  gap: 0 14px;
+}
+.placement-result-head {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 4px 12px;
+}
+.placement-excluded {
+  opacity: 0.7;
+}
+.answer-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 10px 0 6px;
+}
+.answer-chip {
+  padding: 5px 12px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 600;
+  border: 1.5px solid var(--chip-edge);
+  background: var(--chip-bg);
+  color: var(--chip-ink);
+}
+.answer-yes {
+  --chip-edge: #3c8d5a;
+  --chip-bg: #e4f3e7;
+  --chip-ink: #1f4d31;
+}
+.answer-no {
+  --chip-edge: #c4382b;
+  --chip-bg: #fde1dd;
+  --chip-ink: #7a1d14;
+}
+.answer-open {
+  --chip-edge: #8b9591;
+  --chip-bg: #ffffff;
+  --chip-ink: #424a47;
+  border-style: dashed;
+}
+.answer-open.answer-risk {
+  --chip-edge: #c2940a;
+  --chip-bg: #fff3c9;
+  --chip-ink: #5c4500;
+}
+@media (max-width: 640px) {
+  .idea-field {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* 3D placement podium (PlacementPodium.tsx). Blocks grow up from the ground in rank order. */
+.placement-podium {
+  margin: 8px 0 18px;
+}
+.placement-podium svg {
+  width: 100%;
+  max-height: 340px;
+}
+.podium-block,
+.podium-tracker {
+  transform-box: fill-box;
+  transform-origin: bottom;
+  animation: podium-rise 0.6s var(--ease-out) both;
+}
+.podium-tracker {
+  animation-delay: 0.45s;
+}
+@keyframes podium-rise {
+  from {
+    transform: scaleY(0.05);
+    opacity: 0;
+  }
+}
+.podium-label {
+  font-size: 12px;
+  fill: var(--ink);
+}
+.podium-name {
+  font-weight: 700;
+}
+.podium-verdict {
+  font-size: 11px;
+}
+.podium-best {
+  fill: #2f7a4e;
+  font-weight: 700;
+}
+.podium-out {
+  fill: var(--muted);
+}
+.name-sensor {
+  display: grid;
+  gap: 4px;
+  margin: 18px 0 8px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+}
+.name-sensor h3 {
+  margin: 0;
+}
+.name-sensor button {
+  justify-self: start;
+  margin-top: 12px;
+}
+.shake-status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 6px 0 2px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  border: 1.5px dashed var(--line);
+  font-size: 14px;
+}
+.shake-found {
+  border: 1.5px solid #3c8d5a;
+  background: #e4f3e7;
+  color: #1f4d31;
+}
+.shake-dot {
+  flex: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #2e8b62;
+  animation: shake-pulse 1.2s ease-in-out infinite;
+}
+@keyframes shake-pulse {
+  50% {
+    opacity: 0.25;
+    transform: scale(0.7);
+  }
 }

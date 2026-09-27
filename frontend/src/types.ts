@@ -96,6 +96,8 @@ export interface Resident {
   share_alerts_with_family: boolean;
   share_activity_with_family: boolean;
   family_notify: FamilyNotify;
+  marked_okay_at: string | null;
+  marked_okay_by: string | null;
   device_ids: string[];
 }
 export type FamilyNotify = "immediately" | "if_unanswered";

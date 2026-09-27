@@ -8,9 +8,9 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlmodel import Session, col, select
 
-from .. import auth, clock, community, config
+from .. import alerts, auth, clock, community, config
 from ..db import get_session
-from ..models import Community, Device, Resident, User
+from ..models import Alert, Community, Device, Resident, User
 from ..serialize import alert_dict, is_online, resident_dict
 
 router = APIRouter()
@@ -75,6 +75,46 @@ def resident_summary(
         "alerts": [alert_dict(a) for a in alerts],
         "response_times": community.response_times(alerts),
     }
+
+
+@router.post("/residents/{resident_id}/okay")
+def mark_okay(
+    resident_id: str,
+    session: Session = Depends(get_session),
+    user: User | None = Depends(auth.current_user),
+):
+    """Someone visited or called and the resident is okay. Counts as activity on each of the
+    resident's sensors (restarting the countdown, so the grid turns green) and resolves open
+    alerts. Offline-sensor alerts stay open: a resident being okay doesn't fix the sensor."""
+    resident = _get_resident(session, resident_id, user)
+    staff = user is not None and user.role == "provider"
+    now = clock.now()
+    devices = session.exec(select(Device).where(Device.resident_id == resident.id)).all()
+    for device in devices:
+        open_alerts = session.exec(
+            select(Alert).where(Alert.device_id == device.id, col(Alert.resolved_at).is_(None))
+        ).all()
+        for alert in open_alerts:
+            if alert.kind == "offline":
+                continue
+            alert.resolved_at = now
+            alert.resolved_by = "staff" if staff else "family"
+            alert.escalate_at_real = None
+            if staff and alert.acknowledged_at is None:
+                alert.acknowledged_at = now
+                alert.acknowledged_by = user.name
+            session.add(alert)
+        alerts.record_check_in(session, device, value="check_in")
+        if device.status != "offline":
+            alerts.set_status(device, "ok")
+            device.reply_deadline_real = None
+        session.add(device)
+    resident.marked_okay_at = now
+    resident.marked_okay_by = user.name if user else "Family"
+    session.add(resident)
+    session.commit()
+    session.refresh(resident)
+    return resident_dict(session, resident)
 
 
 @router.patch("/residents/{resident_id}")

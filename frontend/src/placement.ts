@@ -1,134 +1,319 @@
-import { placementRisks, riskCost, type RiskAnswers } from "./placementRisks";
+import {
+  placementRisks,
+  riskCost,
+  type PlacementRisk,
+  type RiskAnswers,
+  type RiskKey,
+} from "./placementRisks";
 
-export const placementQuestions = [
-  {
-    key: "secure",
-    title: "Can the tracker stay securely attached here?",
-    hint: "Check that it stays dry and does not obstruct the object, its controls, or someone’s movement.",
-  },
-  {
-    key: "moves",
-    title: "Does this object move when it is used?",
-    hint: "Think about the exact part you would attach it to. A moving door and a stationary shelf give different signals.",
-  },
-  {
-    key: "daily",
-    title: "Is it used as part of a daily routine?",
-    hint: "Choose something the person already uses regularly, without asking them to change their habits.",
-  },
-  {
-    key: "personal",
-    title: "Is it mainly used by the person you want to check on?",
-    hint: "Other people or pets using the same object can make its activity harder to interpret.",
-  },
-] as const;
+// Ranks possible tracker spots without a questionnaire: the four placement checks are worked
+// out from the object's name, its optional details, and who lives there. Every answer is shown
+// and can be corrected, so a wrong guess costs one tap instead of a list of questions.
 
-export type PlacementAnswers = RiskAnswers &
-  Partial<Record<(typeof placementQuestions)[number]["key"], boolean>>;
+export type CheckKey = "secure" | "moves" | "daily" | "personal";
+export type AnswerKey = CheckKey | RiskKey;
+export type PlacementAnswers = RiskAnswers & Partial<Record<CheckKey, boolean>>;
+export type Household = "alone" | "others" | "unknown";
+
+export const CHECKS: Record<CheckKey, { yes: string; no: string; unknown: string }> = {
+  moves: {
+    yes: "Moves when used",
+    no: "Doesn’t move when used",
+    unknown: "Moves when used?",
+  },
+  daily: { yes: "Used every day", no: "Not used every day", unknown: "Used every day?" },
+  secure: { yes: "Attaches securely", no: "Hard to attach", unknown: "Attaches securely?" },
+  personal: {
+    yes: "Mostly used by them",
+    no: "Shared with others",
+    unknown: "Mostly used by them?",
+  },
+};
+
+interface KnownObject {
+  match: RegExp;
+  moves: boolean;
+  daily: boolean;
+  secure: boolean;
+  // "shared": used by everyone at home, so personal use depends on who lives there.
+  use: "personal" | "shared";
+  why: string;
+}
+
+// Everyday objects people suggest most, with what an accelerometer tag on them would see.
+const KNOWN: KnownObject[] = [
+  {
+    match: /\b(walker|rollator|wheelchair|zimmer)\b/,
+    moves: true,
+    daily: true,
+    secure: true,
+    use: "personal",
+    why: "Moves with nearly every trip around the home",
+  },
+  {
+    match: /\b(cane|walking stick|crutch\w*)\b/,
+    moves: true,
+    daily: true,
+    secure: true,
+    use: "personal",
+    why: "Moves whenever they walk with it",
+  },
+  {
+    match: /\b(pill\s*box|pillbox|pill organi[sz]er|medication|medicine|pills?)\b/,
+    moves: true,
+    daily: true,
+    secure: true,
+    use: "personal",
+    why: "Opened at medication times every day",
+  },
+  {
+    match: /\b(fridge|refrigerator|freezer)\b/,
+    moves: true,
+    daily: true,
+    secure: true,
+    use: "shared",
+    why: "Opened at nearly every meal",
+  },
+  {
+    match: /\b(microwave)\b/,
+    moves: true,
+    daily: true,
+    secure: true,
+    use: "shared",
+    why: "Its door opens whenever a meal is warmed up",
+  },
+  {
+    match: /\b(bed|mattress|bed ?frame|nightstand|bedside)\b/,
+    moves: true,
+    daily: true,
+    secure: true,
+    use: "personal",
+    why: "Shows getting up in the morning and going to bed",
+  },
+  {
+    match: /\b(recliner|armchair|favorite chair|favourite chair)\b/,
+    moves: true,
+    daily: true,
+    secure: true,
+    use: "personal",
+    why: "Moves when they sit down or get up",
+  },
+  {
+    match: /\b(bathroom door|toilet|commode)\b/,
+    moves: true,
+    daily: true,
+    secure: true,
+    use: "personal",
+    why: "Used several times every day",
+  },
+  {
+    match: /\b(front door|back door|entry door|main door)\b/,
+    moves: true,
+    daily: true,
+    secure: true,
+    use: "shared",
+    why: "Shows comings and goings",
+  },
+  {
+    match: /\b(bedroom door|closet|wardrobe|dresser)\b/,
+    moves: true,
+    daily: true,
+    secure: true,
+    use: "personal",
+    why: "Opened when getting up and dressing",
+  },
+  {
+    match: /\b(pantry|cupboard|cabinet|drawer)\b/,
+    moves: true,
+    daily: true,
+    secure: true,
+    use: "shared",
+    why: "Opened during daily routines like meals",
+  },
+  {
+    match: /\b(kettle|coffee ?(maker|machine|pot)|toaster)\b/,
+    moves: true,
+    daily: true,
+    secure: true,
+    use: "shared",
+    why: "Part of a morning routine",
+  },
+  {
+    match: /\b(curtains?|blinds?)\b/,
+    moves: true,
+    daily: true,
+    secure: true,
+    use: "shared",
+    why: "Opened in the morning and closed at night",
+  },
+  {
+    match: /\b(sink|faucet|tap|shower|bathtub|tub)\b/,
+    moves: true,
+    daily: true,
+    secure: false,
+    use: "shared",
+    why: "The handle turns every day, but it’s wet and hard to attach to",
+  },
+  {
+    match: /\b(remote|tv remote|controller)\b/,
+    moves: true,
+    daily: true,
+    secure: false,
+    use: "shared",
+    why: "Used daily, but small, shared, and easy to misplace",
+  },
+  {
+    match: /\b(mailbox|mail box|letterbox)\b/,
+    moves: true,
+    daily: false,
+    secure: true,
+    use: "shared",
+    why: "Checked about once a day at most, and often outside",
+  },
+  {
+    match:
+      /(shel(f|ves)|\b(wall|table|counter(top)?|floor|ceiling|window ?sill|mantel|picture frame))\b/,
+    moves: false,
+    daily: true,
+    secure: true,
+    use: "shared",
+    why: "Stays still, so it won’t register when someone is active",
+  },
+];
+
+// For names the table doesn't know: what the words suggest.
+const MOVING_PART = /\b(door|drawer|lid|handle|hatch|gate|flap|cabinet|cupboard|box|bag|bottle)\b/;
+const STATIONARY = /(shel(f|ves)|\b(wall|table|counter|floor|ceiling|sill|frame|mantel|stand))\b/;
+const DAILY_WORDS =
+  /\b(every ?day|daily|each (morning|day|night|meal)|every (morning|night|meal)|always|routine)\b/;
+const RARE_WORDS = /\b(rarely|sometimes|occasionally|weekly|monthly|guest|holiday|seasonal)\b/;
+
+export interface Inference {
+  answers: PlacementAnswers;
+  // Why each check came out the way it did, when there is a reason worth showing.
+  reasons: Partial<Record<CheckKey, string>>;
+  why: string | null;
+}
+
+export function inferPlacement(name: string, description = "", household: Household): Inference {
+  const text = `${name} ${description}`.toLowerCase();
+  const known = KNOWN.find((item) => item.match.test(text));
+  const answers: PlacementAnswers = {};
+  const reasons: Inference["reasons"] = {};
+  if (known) {
+    answers.moves = known.moves;
+    answers.daily = known.daily;
+    answers.secure = known.secure;
+  } else {
+    if (MOVING_PART.test(text)) answers.moves = true;
+    else if (STATIONARY.test(text)) answers.moves = false;
+    if (answers.moves !== undefined) answers.secure = true;
+  }
+  // What the details say about how often it's used overrides the general expectation.
+  if (RARE_WORDS.test(text)) {
+    answers.daily = false;
+    reasons.daily = "Your details say it isn’t used every day";
+  } else if (DAILY_WORDS.test(text)) {
+    answers.daily = true;
+    reasons.daily = "Your details say it’s part of the daily routine";
+  }
+  if (known?.use === "personal") answers.personal = true;
+  else if (household === "alone") {
+    answers.personal = true;
+    reasons.personal = "They live alone";
+  } else if (household === "others") {
+    answers.personal = false;
+    reasons.personal = "Others at home use it too";
+  }
+  return { answers, reasons, why: known?.why ?? null };
+}
+
 export interface PlacementIdea {
   name: string;
-  description?: string;
+  description: string;
+  // Corrections the user made by tapping a chip; they win over the inferred answers.
+  overrides: PlacementAnswers;
+}
+
+export interface RankedPlacement {
+  idea: PlacementIdea;
   answers: PlacementAnswers;
+  inference: Inference;
+  risks: PlacementRisk[];
+  // Checks and risks with no answer yet: the only things worth asking about.
+  open: AnswerKey[];
+  excluded: string | null;
+  score: number;
 }
 
-export function questionsForPlacement(idea: PlacementIdea, household = "") {
-  return [
-    ...placementRisks(idea.name, idea.description, household).map((risk) => ({
-      key: risk.key,
-      title: risk.question,
-      hint: risk.reason,
-    })),
-    ...placementQuestions,
-  ];
+const RULES_OUT: Record<CheckKey, string | null> = {
+  secure: "It needs a spot where the tracker stays firmly attached.",
+  moves: "The spot needs to move when the object is used, or activity will be missed.",
+  daily: "Something used every day shows a routine; occasional use doesn’t.",
+  personal: null,
+};
+
+function exclusion(answers: PlacementAnswers, risks: PlacementRisk[]): string | null {
+  for (const key of ["secure", "moves", "daily"] as const)
+    if (answers[key] === false) return RULES_OUT[key];
+  const failed = risks.find((risk) => answers[risk.key] === false);
+  return failed ? `${failed.label}: ${failed.reason}` : null;
 }
 
-export interface PlacementContext {
-  routine: string;
-  relevance: string;
-  consistency: string;
-  frequency: string;
-  riskAnswers?: RiskAnswers;
+// Movement matters most, then daily use, then a secure fit, then personal use. Unanswered
+// checks count half, and unconfirmed safety concerns cost their weight.
+const WEIGHTS: Record<CheckKey, number> = { moves: 8, daily: 6, secure: 4, personal: 3 };
+
+export function scorePlacement(answers: PlacementAnswers, risks: PlacementRisk[]): number {
+  const checks = (Object.keys(WEIGHTS) as CheckKey[]).reduce(
+    (total, key) =>
+      total +
+      (answers[key] === true ? WEIGHTS[key] : answers[key] === undefined ? WEIGHTS[key] / 2 : 0),
+    0,
+  );
+  const unconfirmed = risks.filter((risk) => answers[risk.key] !== true);
+  return checks - riskCost(unconfirmed) * 2;
 }
 
-// Lexicographic weights keep frequent unrelated activity from outranking a relevant routine.
-export function comparePlacementContext(
-  names: string[],
-  context: Record<string, PlacementContext>,
-): string[] {
-  const scores = names.map((name) => {
-    const details = context[name];
-    const risks = placementRisks(name, details?.routine);
-    if (
-      !details?.routine?.trim() ||
-      risks.some((risk) => details.riskAnswers?.[risk.key] !== true) ||
-      [details.relevance, details.consistency, details.frequency].some(
-        (value) => !["0", "1", "2"].includes(value),
-      )
-    )
-      return { name, score: -1000 };
-    return {
-      name,
-      score:
-        Number(details.relevance) * 9 +
-        Number(details.consistency) * 3 +
-        Number(details.frequency) -
-        riskCost(risks) * 27,
-    };
-  });
-  const maximum = Math.max(...scores.map((item) => item.score));
-  return scores.every((item) => item.score === -1000)
-    ? []
-    : scores.filter((item) => item.score === maximum).map((item) => item.name);
+const CORE: AnswerKey[] = ["moves", "daily", "secure"];
+
+/** The label for one ranked idea. A guess isn't a recommendation, so an idea with unanswered
+ * core checks says "Check first" until they're tapped. */
+export function verdict(result: RankedPlacement, best: RankedPlacement | undefined): string {
+  if (result.excluded) return "Not a good spot";
+  if (result.open.some((key) => CORE.includes(key))) return "Check first";
+  if (result === best) return "Best choice";
+  return best && result.score === best.score ? "Equally good" : "Also works";
 }
 
-// A branch stops at the first unsuitable answer; personal use breaks ties among usable ideas.
-export function placementResult(idea: PlacementIdea, household = "") {
-  const { answers } = idea;
-  const risks = placementRisks(idea.name, idea.description, household);
-  const unconfirmed = risks.find((risk) => answers[risk.key] !== true);
-  if (unconfirmed)
-    return {
-      rank: 0,
-      reason: `${unconfirmed.label}: ${answers[unconfirmed.key] === false ? "Your answer rules out this placement." : "Confirm this condition before choosing this placement."} ${unconfirmed.reason}`,
-    };
-  if (answers.secure === false)
-    return {
-      rank: 0,
-      reason:
-        "Reconsider the attachment: it needs to stay secure, dry, and out of the way.",
-    };
-  if (answers.moves === false)
-    return {
-      rank: 0,
-      reason:
-        "This spot may not move when the object is used, so activity could be missed.",
-    };
-  if (answers.daily === false)
-    return {
-      rank: 0,
-      reason:
-        "Occasional use makes it harder to recognize an everyday routine.",
-    };
-  if (
-    answers.secure &&
-    answers.moves &&
-    answers.daily &&
-    answers.personal !== undefined
-  ) {
-    return answers.personal
-      ? {
-          rank: 2,
-          reason:
-            "Your answers describe a secure spot that moves during a daily routine and is mainly used by one person.",
-        }
-      : {
-          rank: 1,
-          reason:
-            "This fits a daily routine, but shared use could be mistaken for this person’s activity.",
-        };
-  }
-  return {
-    rank: 0,
-    reason: "Finish the questions for this idea before comparing it.",
-  };
+export function rankPlacements(
+  ideas: PlacementIdea[],
+  household: Household,
+  notes = "",
+): RankedPlacement[] {
+  return ideas
+    .map((idea) => {
+      const inference = inferPlacement(idea.name, idea.description, household);
+      const answers = { ...inference.answers, ...idea.overrides };
+      const risks = placementRisks(idea.name, idea.description, notes);
+      const open = [
+        ...(Object.keys(CHECKS) as CheckKey[]).filter((key) => answers[key] === undefined),
+        ...risks.filter((risk) => answers[risk.key] === undefined).map((risk) => risk.key),
+      ];
+      return {
+        idea,
+        answers,
+        inference,
+        risks,
+        open,
+        excluded: exclusion(answers, risks),
+        score: scorePlacement(answers, risks),
+      };
+    })
+    .sort(
+      (a, b) =>
+        Number(a.excluded !== null) - Number(b.excluded !== null) ||
+        b.score - a.score ||
+        riskCost(a.risks) - riskCost(b.risks),
+    );
 }

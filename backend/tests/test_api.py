@@ -946,3 +946,36 @@ def test_saved_alerts_lose_the_old_family_name():
         demo_community.ensure(session)
         session.refresh(old)
         assert old.message == "StillHere: Rosa's fridge sensor is offline."
+
+
+def test_mark_okay_turns_a_quiet_resident_green(client):
+    staff = _login(client, PROVIDER)
+    assert _grid(client)["106"]["state"] == "worry"
+    res = client.post("/api/residents/mg-106/okay", headers=staff).json()
+    assert res["marked_okay_by"] == "Maple Grove wellness staff" and res["marked_okay_at"]
+    unit = _grid(client)["106"]
+    assert unit["state"] == "fine" and unit["minutes_since_motion"] == 0
+    assert unit["last_event"]["type"] == "motion" and unit["last_event"]["value"] == "check_in"
+    body = client.get("/api/community", headers=staff).json()
+    assert "mg-106" not in body["checkin"]["resident_ids"]
+
+
+def test_mark_okay_resolves_alerts_but_not_offline_ones(client):
+    staff = _login(client, PROVIDER)
+    _event(client, {"type": "reply", "value": "help"})
+    assert _grid(client)["204"]["state"] == "urgent"
+    client.post("/api/residents/mg-204/okay", headers=staff)
+    fridge = _fridge(client)
+    assert fridge["active_alert"] is None and fridge["status"] == "ok"
+    assert fridge["alerts"][0]["resolved_by"] == "staff"
+    # The simulated offline apartment stays offline: a visit doesn't fix a dead sensor.
+    client.post("/api/residents/mg-208/okay", headers=staff)
+    assert _grid(client)["208"]["state"] == "offline"
+
+
+def test_family_can_mark_only_their_own_resident_okay(client):
+    family = _login(client, FAMILY)
+    assert client.post("/api/residents/mg-204/okay", headers=family).json()["marked_okay_by"] == (
+        "Sam (family)"
+    )
+    assert client.post("/api/residents/mg-106/okay", headers=family).status_code == 404

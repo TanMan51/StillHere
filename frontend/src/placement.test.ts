@@ -1,155 +1,130 @@
 import { describe, expect, it } from "vitest";
-import {
-  comparePlacementContext,
-  placementResult,
-  questionsForPlacement,
-} from "./placement";
+import { inferPlacement, rankPlacements, verdict, type PlacementIdea } from "./placement";
 import { placementRisks, riskCost } from "./placementRisks";
 
-describe("placement decisions", () => {
-  it("never recommends an incomplete or unsuitable spot", () => {
-    expect(placementResult({ name: "Shelf", answers: {} }).rank).toBe(0);
-    expect(
-      placementResult({ name: "Loose attachment", answers: { secure: false } })
-        .rank,
-    ).toBe(0);
-    expect(
-      placementResult({
-        name: "Shelf",
-        answers: { secure: true, moves: false },
-      }).rank,
-    ).toBe(0);
-    expect(
-      placementResult({
-        name: "Guest room door",
-        answers: { secure: true, moves: true, daily: false },
-      }).rank,
-    ).toBe(0);
+const idea = (name: string, description = "", overrides = {}): PlacementIdea => ({
+  name,
+  description,
+  overrides,
+});
+const order = (ideas: PlacementIdea[], household: "alone" | "others" | "unknown" = "alone") =>
+  rankPlacements(ideas, household).map((result) => result.idea.name);
+
+describe("automatic placement answers", () => {
+  it("knows common objects without asking", () => {
+    const fridge = inferPlacement("Fridge door", "", "alone");
+    expect(fridge.answers).toMatchObject({
+      moves: true,
+      daily: true,
+      secure: true,
+      personal: true,
+    });
+    expect(fridge.why).toContain("meal");
+    expect(inferPlacement("Walker", "", "others").answers.personal).toBe(true);
+    expect(inferPlacement("Bookshelf", "", "alone").answers.moves).toBe(false);
   });
-  it("ranks personal daily use above shared use without discarding shared options", () => {
-    const answers = { secure: true, moves: true, daily: true };
-    const shared = placementResult({
-      name: "Shared door",
-      answers: { ...answers, personal: false },
-    });
-    const personal = placementResult({
-      name: "Personal drawer",
-      answers: { ...answers, personal: true },
-    });
-    expect(shared.rank).toBeGreaterThan(0);
-    expect(personal.rank).toBeGreaterThan(shared.rank);
-    expect(shared.reason).toContain("shared use");
+  it("uses the household for shared objects and leaves it open when unknown", () => {
+    expect(inferPlacement("Front door", "", "others").answers.personal).toBe(false);
+    expect(inferPlacement("Front door", "", "alone").answers.personal).toBe(true);
+    expect(inferPlacement("Front door", "", "unknown").answers.personal).toBeUndefined();
+  });
+  it("reads unfamiliar names and details instead of asking", () => {
+    expect(inferPlacement("Sewing box lid", "", "alone").answers.moves).toBe(true);
+    expect(inferPlacement("Hall table", "", "alone").answers.moves).toBe(false);
+    expect(inferPlacement("Garden gate", "used every morning", "alone").answers.daily).toBe(true);
+    expect(inferPlacement("Guest room door", "", "alone").answers.daily).toBe(false);
+    expect(inferPlacement("Thing", "", "alone").answers.moves).toBeUndefined();
   });
 });
 
-describe("contextual placement comparison", () => {
-  it("prioritizes the stated routine over unrelated frequent activity", () => {
-    const context = {
-      Fridge: {
-        routine: "Breakfast",
-        relevance: "2",
-        consistency: "1",
-        frequency: "1",
-      },
-      Door: {
-        routine: "Shared entrances",
-        relevance: "0",
-        consistency: "2",
-        frequency: "2",
-      },
-    };
-    expect(comparePlacementContext(["Door", "Fridge"], context)).toEqual([
-      "Fridge",
+describe("ranking", () => {
+  it("never recommends a spot that doesn't move, can't attach, or isn't used daily", () => {
+    const results = rankPlacements(
+      [
+        idea("Stationary shelf"),
+        idea("Loose spot", "", { secure: false }),
+        idea("Guest room door"),
+      ],
+      "alone",
+    );
+    expect(results.every((result) => result.excluded !== null)).toBe(true);
+  });
+  it("puts the best everyday spots first and ruled-out ones last", () => {
+    expect(order([idea("Bookshelf"), idea("Front door"), idea("Walker")], "others")).toEqual([
+      "Walker",
+      "Front door",
+      "Bookshelf",
     ]);
   });
-  it("preserves genuine ties for a contextual follow-up instead of choosing by order", () => {
-    const detail = {
-      routine: "Morning use",
-      relevance: "2",
-      consistency: "2",
-      frequency: "1",
-    };
-    expect(
-      comparePlacementContext(["A", "B"], { A: detail, B: detail }),
-    ).toEqual(["A", "B"]);
-    expect(comparePlacementContext(["A"], {})).toEqual([]);
+  it("ranks personal use above shared use without discarding shared spots", () => {
+    const [first, second] = rankPlacements([idea("Front door"), idea("Pill box")], "others");
+    expect(first.idea.name).toBe("Pill box");
+    expect(second.excluded).toBeNull();
+  });
+  it("lets a tapped correction win over the guess", () => {
+    const corrected = rankPlacements([idea("Fridge door", "", { moves: false })], "alone")[0];
+    expect(corrected.answers.moves).toBe(false);
+    expect(corrected.excluded).toContain("move");
+  });
+  it("lists only what it couldn't work out as open", () => {
+    expect(rankPlacements([idea("Fridge door")], "alone")[0].open).toEqual([]);
+    expect(rankPlacements([idea("Thing")], "alone")[0].open).toEqual(
+      expect.arrayContaining(["moves", "daily", "secure"]),
+    );
+  });
+  it("ranks wet or portable spots lower until their concerns are confirmed", () => {
+    expect(order([idea("My iPhone"), idea("Kitchen drawer")])).toEqual([
+      "Kitchen drawer",
+      "My iPhone",
+    ]);
+    const confirmed = rankPlacements(
+      [
+        idea("My iPhone", "", {
+          dry: true,
+          routineMotion: true,
+          secure: true,
+          moves: true,
+          daily: true,
+        }),
+      ],
+      "alone",
+    )[0];
+    expect(confirmed.excluded).toBeNull();
+    expect(rankPlacements([idea("My iPhone", "", { dry: false })], "alone")[0].excluded).toContain(
+      "Water",
+    );
+  });
+});
+
+describe("verdicts", () => {
+  it("calls ties equally good and guesses check first", () => {
+    const results = rankPlacements([idea("Fridge door"), idea("Walker"), idea("Thing")], "alone");
+    const [best] = results;
+    expect(results.map((result) => verdict(result, best))).toEqual([
+      "Best choice",
+      "Equally good",
+      "Check first",
+    ]);
+  });
+  it("rules out wet taps that are hard to attach", () => {
+    const [sink] = rankPlacements([idea("Bathroom sink")], "alone");
+    expect(verdict(sink, undefined)).toBe("Not a good spot");
   });
 });
 
 describe("object and environmental context", () => {
-  const answers = { secure: true, moves: true, daily: true, personal: true };
   it("recognizes phones and asks about water and unrelated carrying", () => {
-    const phone = { name: "My iPhone", answers };
-    expect(placementRisks(phone.name).map((risk) => risk.key)).toEqual([
-      "dry",
-      "routineMotion",
-    ]);
-    expect(questionsForPlacement(phone)[0].key).toBe("dry");
-    expect(placementResult(phone).rank).toBe(0);
-    expect(
-      placementResult({ ...phone, answers: { ...answers, dry: false } }).reason,
-    ).toContain("rules out");
-    expect(
-      placementResult({
-        ...phone,
-        answers: { ...answers, dry: true, routineMotion: true },
-      }).rank,
-    ).toBe(2);
-    expect(riskCost(placementRisks(phone.name))).toBeGreaterThan(
+    expect(placementRisks("My iPhone").map((risk) => risk.key)).toEqual(["dry", "routineMotion"]);
+    expect(riskCost(placementRisks("My iPhone"))).toBeGreaterThan(
       riskCost(placementRisks("Drawer")),
     );
   });
   it("checks household and per-location context even for unfamiliar object names", () => {
+    expect(placementRisks("Object A", "Near the sink").map((risk) => risk.key)).toContain("dry");
     expect(
-      placementRisks("Object A", "Near the sink").map((risk) => risk.key),
-    ).toContain("dry");
-    expect(
-      placementRisks("Object A", "", "Often used outside in the rain").map(
-        (risk) => risk.key,
-      ),
+      placementRisks("Object A", "", "Often used outside in the rain").map((risk) => risk.key),
     ).toEqual(["dry", "indoors"]);
     expect(placementRisks("Kettle").map((risk) => risk.key)).toContain("cool");
     expect(placementRisks("Hotline drawer")).toEqual([]);
-  });
-  it("treats negated descriptions as a prompt to verify, not proof of exposure", () => {
-    const idea = {
-      name: "Drawer",
-      description: "Never gets wet",
-      answers: { ...answers, dry: true },
-    };
-    expect(placementResult(idea).rank).toBe(2);
-  });
-  it("cannot promote a wet phone through high routine scores", () => {
-    const detail = {
-      routine: "Morning use",
-      relevance: "2",
-      consistency: "2",
-      frequency: "2",
-    };
-    const context = {
-      Phone: { ...detail, riskAnswers: { dry: false, routineMotion: true } },
-      Drawer: { ...detail, relevance: "1" },
-    };
-    expect(comparePlacementContext(["Phone", "Drawer"], context)).toEqual([
-      "Drawer",
-    ]);
-    expect(comparePlacementContext(["Phone"], context)).toEqual([]);
-  });
-  it("uses descriptions added during tie-breaking and rejects all-unconfirmed conditions", () => {
-    const detail = {
-      routine: "Used near a sink",
-      relevance: "2",
-      consistency: "2",
-      frequency: "1",
-    };
-    expect(
-      comparePlacementContext(["A", "B"], { A: detail, B: detail }),
-    ).toEqual([]);
-    expect(
-      comparePlacementContext(["A", "B"], {
-        A: detail,
-        B: { ...detail, riskAnswers: { dry: true } },
-      }),
-    ).toEqual(["B"]);
   });
 });

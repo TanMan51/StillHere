@@ -65,6 +65,8 @@ def resident_dict(session: Session, r: Resident) -> dict:
         "share_alerts_with_family": r.share_alerts_with_family,
         "share_activity_with_family": r.share_activity_with_family,
         "family_notify": r.family_notify,
+        "marked_okay_at": clock.iso(r.marked_okay_at),
+        "marked_okay_by": r.marked_okay_by,
         "device_ids": list(device_ids),
     }
 

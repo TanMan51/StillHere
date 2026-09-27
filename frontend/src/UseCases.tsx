@@ -11,7 +11,7 @@ const TONES = {
 const SENSOR_SIZE = "60 × 62 × 28 mm";
 
 type Tone = keyof typeof TONES;
-interface Box {
+export interface Box {
   x: number;
   y: number;
   z: number;
@@ -20,17 +20,17 @@ interface Box {
   h: number;
   tone?: Tone;
 }
-type Point = [number, number];
+export type Point = [number, number];
 
 /** Isometric projection: +x runs down-right, +y down-left, +z up. */
-function iso(x: number, y: number, z: number): Point {
+export function iso(x: number, y: number, z: number): Point {
   return [(x - y) * 0.866, (x + y) * 0.5 - z];
 }
-const path = (points: Point[]) =>
+export const path = (points: Point[]) =>
   `M${points.map(([x, y]) => `${x.toFixed(1)} ${y.toFixed(1)}`).join("L")}Z`;
 
 /** The three faces a viewer at (+x, +y, +z) can see. */
-function boxFaces({ x, y, z, w, d, h }: Box): Point[][] {
+export function boxFaces({ x, y, z, w, d, h }: Box): Point[][] {
   return [
     [iso(x, y, z + h), iso(x + w, y, z + h), iso(x + w, y + d, z + h), iso(x, y + d, z + h)],
     [iso(x, y + d, z), iso(x + w, y + d, z), iso(x + w, y + d, z + h), iso(x, y + d, z + h)],

@@ -10,6 +10,8 @@
     "share_alerts_with_family": true,
     "share_activity_with_family": true,
     "family_notify": "immediately",
+    "marked_okay_at": null,
+    "marked_okay_by": null,
     "device_ids": ["sim-102"]
   },
   "community_name": "Maple Grove Senior Living",

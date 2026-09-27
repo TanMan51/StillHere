@@ -202,6 +202,11 @@ null; set for family caregivers).
 - `PATCH /api/residents/{id}`, body (all optional) `{"share_alerts_with_family": boolean,
 "share_activity_with_family": boolean, "family_notify": "immediately" | "if_unanswered"}` →
   Resident.
+- `POST /api/residents/{id}/okay` → Resident. Someone visited or called and the resident is
+  okay ("Mark as okay"). Records `marked_okay_at`/`marked_okay_by`, adds a motion event with
+  `value: "check_in"` to each of the resident's devices (restarting the no-movement countdown,
+  like resolving an alert does), and resolves open alerts except `offline` ones. Family
+  caregivers can mark only their own resident. No body.
 - `GET /api/residents/{id}/summary` → everything for the resident page and the printable visit
   summary (see `fixtures/resident_summary.json`, whose trend is cut to 5 days):
   `{"server_now", "resident": Resident, "community_name": string or null, "timezone": IANA name,
@@ -221,7 +226,8 @@ their own past, and its wording is never medical: "Activity lower than usual…"
 `last_name`, `floor` (integer or null), `unit` (string or null), `share_alerts_with_family`
 (boolean, default true), `share_activity_with_family` (boolean, default true), `family_notify`
 (`"immediately"` or `"if_unanswered"`, default `"immediately"`: when family hears about urgent
-alerts in a community with an on-call phone), `device_ids` ([string]).
+alerts in a community with an on-call phone), `marked_okay_at` (timestamp or null),
+`marked_okay_by` (string or null), `device_ids` ([string]).
 
 ### Community (healthcare providers)
 
@@ -390,3 +396,5 @@ Wording lives in `backend/app/messages.py`. These are examples, not a fixed form
   community `latitude`/`longitude`, and `POST /api/community/weather/simulate`.
 - Add weather location and conditions: community `location_name`, `conditions` on
   `GET /api/community`, and `GET /api/places`.
+- Add "Mark as okay": `POST /api/residents/{id}/okay`, `marked_okay_at`/`marked_okay_by` on
+  Resident, and `value: "check_in"` on the motion events it records.
