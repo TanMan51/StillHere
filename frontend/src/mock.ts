@@ -5,6 +5,7 @@ import loginFixture from "../../contract/fixtures/auth_login.json";
 import residentFixture from "../../contract/fixtures/residents.json";
 import communityFixture from "../../contract/fixtures/community.json";
 import summaryFixture from "../../contract/fixtures/resident_summary.json";
+import learningFixture from "../../contract/fixtures/device_learning.json";
 import { loadSession } from "./session";
 import type {
   Baseline,
@@ -165,6 +166,9 @@ export async function mockRequest(path: string, method: string, raw?: unknown): 
     }
     return response({ ...community, server_now });
   }
+  if (parts[0] === "devices" && parts[2]?.startsWith("learning"))
+    // Preview mode has one sample replay; it stands in for every sensor.
+    return response({ ...learningFixture, device_id: decodeURIComponent(parts[1]) });
   if (path === "/devices") return response({ server_now, devices });
   if (parts[0] === "devices") {
     const device = devices.find((d) => d.id === decodeURIComponent(parts[1]));

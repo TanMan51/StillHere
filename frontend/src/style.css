@@ -2502,3 +2502,211 @@ footer {
     transform: scale(0.7);
   }
 }
+
+/* "Watch it learn" routine replay (LearningDemo.tsx). */
+.learning-demo {
+  margin: 24px 0;
+}
+.learning-head {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px 24px;
+}
+.learning-head h2 {
+  margin: 0 0 4px;
+}
+.learning-status {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  margin-top: 16px;
+}
+.learning-pill {
+  padding: 4px 12px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 700;
+  border: 1.5px dashed #c2940a;
+  background: #fff3c9;
+  color: #5c4500;
+}
+.learning-pill.learned {
+  border: 1.5px solid #3c8d5a;
+  background: #e4f3e7;
+  color: #1f4d31;
+}
+.learning-progress {
+  height: 8px;
+  margin: 10px 0 18px;
+  border-radius: 999px;
+  background: #e3ebdd;
+  overflow: hidden;
+}
+.learning-progress span {
+  display: block;
+  height: 100%;
+  background: #2e8b62;
+  transition: width 0.3s var(--ease-out);
+}
+.learning-demo h3 {
+  font-size: 14px;
+  margin: 0 0 6px;
+}
+.day-strip svg {
+  width: 100%;
+  height: 44px;
+}
+.day-strip-axis,
+.day-strip-tick {
+  stroke: #b9c3bb;
+  stroke-width: 2;
+}
+.day-strip-dot {
+  fill: #2e8b62;
+  opacity: 0.85;
+  animation: visit-in 0.35s var(--ease-out) both;
+}
+@keyframes visit-in {
+  from {
+    opacity: 0;
+  }
+}
+.day-strip-labels {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: var(--muted);
+}
+.learning-charts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 20px;
+  margin: 20px 0 8px;
+}
+.learning-charts figure {
+  margin: 0;
+}
+.learning-charts figcaption {
+  display: grid;
+  gap: 2px;
+  font-size: 13px;
+  margin-bottom: 6px;
+}
+.learning-charts figcaption span {
+  color: var(--muted);
+}
+.learning-chart {
+  height: 190px;
+}
+.learning-waiting .learning-chart {
+  opacity: 0.35;
+}
+.learning-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 18px;
+}
+.learning-controls label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+  flex: 1 1 220px;
+}
+.learning-controls input[type="range"] {
+  flex: 1;
+  padding: 0;
+}
+.learning-verdict {
+  margin-top: 18px;
+  padding: 14px 16px;
+  border-radius: 14px;
+  border: 1.5px solid #3c8d5a;
+  background: #e4f3e7;
+}
+.learning-verdict.unusual {
+  border-color: #c4382b;
+  background: #fde1dd;
+}
+.learning-verdict p {
+  margin: 4px 0 10px;
+}
+.chance-bar {
+  position: relative;
+  height: 12px;
+  border-radius: 999px;
+  background: #ffffffb0;
+  overflow: visible;
+}
+.chance-fill {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: #2e8b62;
+}
+.learning-verdict.unusual .chance-fill {
+  background: #c4382b;
+}
+.chance-line {
+  position: absolute;
+  top: -4px;
+  bottom: -4px;
+  width: 2px;
+  background: #253e36;
+}
+.learning-how {
+  margin-top: 16px;
+  font-size: 14px;
+}
+.learning-how summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+.learning-empty {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+.learning-sample {
+  margin: 14px 0 0;
+  padding: 10px 14px;
+  border-radius: 12px;
+  border: 1.5px dashed #c2940a;
+  background: #fff9e6;
+  font-size: 14px;
+}
+.what-if-slider {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin: 6px 0 10px;
+}
+.what-if-slider strong {
+  min-width: 84px;
+  font-size: 18px;
+  font-variant-numeric: tabular-nums;
+}
+.what-if-slider input {
+  flex: 1;
+  padding: 0;
+}
+.learning-prompt {
+  margin-top: 16px;
+  padding: 16px 18px;
+  border-radius: 14px;
+  border: 1.5px solid var(--line);
+  background: #f4f7f1;
+}
+.learning-prompt h3 {
+  margin: 0 0 6px;
+}
+.learning-prompt p {
+  margin: 0 0 12px;
+  font-size: 14px;
+}

@@ -2,15 +2,17 @@
 
 from __future__ import annotations
 
+from datetime import timedelta
 from typing import Literal
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
-from sqlmodel import Session
+from sqlmodel import Session, select
 
-from .. import alerts, auth, clock
+from .. import alerts, auth, clock, config, routine
 from ..db import get_session
-from ..models import Alert, Device, User
+from ..models import Alert, Device, Event, User
 from ..serialize import active_alert, alert_dict, device_detail_dict, device_dict
 
 router = APIRouter()
@@ -65,6 +67,62 @@ class DevicePatch(BaseModel):
     limit_minutes: int | None = Field(default=None, ge=1, le=2880)
     sound_enabled: bool | None = None
     motion_sensitivity: Literal["low", "medium", "high"] | None = None
+
+
+# Below this many days of real movement, the "watch it learn" demo replays sample data instead.
+SAMPLE_BELOW_DAYS = 7
+SAMPLE_DAYS = 14
+
+
+@router.get("/devices/{device_id}/learning")
+def device_learning(
+    device_id: str,
+    source: Literal["auto", "real", "sample"] = "auto",
+    session: Session = Depends(get_session),
+    user: User | None = Depends(auth.current_user),
+):
+    """The learned routine replayed day by day, for the dashboard's "watch it learn" demo.
+
+    A new sensor has too little history to learn from, so by default it replays three weeks
+    of sample movement for its kind of object instead. The sample is generated for this
+    response only and never stored, so the sensor's real monitoring is untouched.
+    """
+    device = _get_device(session, device_id, user)
+    _, shows_activity = auth.family_limits(session, user, device.resident_id)
+    if not shows_activity:
+        raise HTTPException(403, "This resident doesn't share activity with family")
+    now = clock.now()
+    times = session.exec(
+        select(Event.ts).where(
+            Event.device_id == device.id,
+            Event.type == "motion",
+            Event.ts <= now,
+            Event.ts >= now - timedelta(days=routine.baseline.HISTORY_DAYS),
+        )
+    ).all()
+    real = [clock.as_utc(t) for t in times]
+    zone = ZoneInfo(config.HOUSEHOLD_TZ)
+    real_days = len({t.astimezone(zone).date() for t in real})
+    use_sample = source == "sample" or (source == "auto" and real_days < SAMPLE_BELOW_DAYS)
+    history = (
+        routine.generate_week(
+            now,
+            config.HOUSEHOLD_TZ,
+            days=SAMPLE_DAYS,
+            object_type=device.object_type,
+            seed=sum(map(ord, device.id)),
+        )
+        if use_sample
+        else real
+    )
+    replay = routine.learning_replay(history, now, config.HOUSEHOLD_TZ)
+    return {
+        "server_now": clock.iso(now),
+        "device_id": device.id,
+        "source": "sample" if use_sample else "real",
+        "real_days": real_days,
+        **replay,
+    }
 
 
 @router.patch("/devices/{device_id}")

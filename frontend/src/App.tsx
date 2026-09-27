@@ -29,6 +29,7 @@ import PlacementGuide, { DeviceSetup, SetupPrompt } from "./PlacementGuide";
 import { LOGOUT_EVENT, loadSession, saveSession, type Session } from "./session";
 import LandingPage from "./LandingPage";
 import ModelSwarm from "./ModelSwarm";
+import LearningDemo from "./LearningDemo";
 import CommunityPage, { ResidentTable } from "./Community";
 import ResidentPage, { VisitSummary } from "./Resident";
 import { useReveal, useSmoothScroll } from "./motion";
@@ -257,6 +258,8 @@ function clockHour(hour: number) {
 }
 function DevicePage() {
   const { id = "" } = useParams();
+  // ?learn=1 (from a resident page) starts the routine replay right away.
+  const autoLearn = new URLSearchParams(useLocation().search).get("learn") === "1";
   const load = useCallback(() => api.device(id), [id]);
   const { data, error, receivedAt, refresh } = usePoll(load);
   if (!data)
@@ -401,6 +404,7 @@ function DevicePage() {
         </section>
         <Settings key={d.id} device={d} onDone={refresh} />
       </div>
+      <LearningDemo key={d.id} deviceId={d.id} name={d.name} autoStart={autoLearn} />
       <div className="detail-grid logs">
         <section className="panel">
           <h2>Recent activity</h2>

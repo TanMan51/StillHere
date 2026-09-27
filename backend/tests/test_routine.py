@@ -237,3 +237,47 @@ def test_too_little_history_is_never_flagged():
     trend = activity_trend(_daily([1] * 23 + [0] * 7), TREND_NOW, "America/New_York")
     assert not trend.lower_than_usual  # prior average below the minimum to compare against
     assert activity_trend([], TREND_NOW, "America/New_York").recent_daily_average == 0
+
+
+# --- "Watch it learn" replay (routine/learning.py) ---
+
+
+def test_replay_learns_day_by_day_and_becomes_ready():
+    from app.routine import generate_week, learning_replay
+
+    now = datetime(2026, 9, 26, 15, 0, tzinfo=timezone.utc)
+    times = generate_week(now, "America/New_York", days=10, object_type="fridge")
+    replay = learning_replay(times, now, "America/New_York")
+    frames = replay["frames"]
+    assert len(frames) == 11  # the first partial day through today
+    assert [f["days_of_data"] for f in frames] == sorted(f["days_of_data"] for f in frames)
+    assert not frames[0]["ready"] and frames[-1]["ready"]
+    first_ready = next(i for i, f in enumerate(frames) if f["ready"])
+    assert frames[first_ready]["days_of_data"] == replay["days_needed"]
+    # The learned rates peak around the fridge's meal times, not at night.
+    rates = frames[-1]["hourly_rate"]
+    assert rates[12] > rates[3] and rates[18] > rates[3]
+    assert all(0 <= minute < 1440 for f in frames for minute in f["visits"])
+
+
+def test_replay_judges_the_current_quiet_stretch():
+    from app.routine import generate_week, learning_replay
+
+    now = datetime(2026, 9, 26, 15, 0, tzinfo=timezone.utc)  # 11 AM in New York
+    times = generate_week(now, "America/New_York", days=14, object_type="fridge")
+    recent = learning_replay(times, now, "America/New_York")["now"]
+    assert 0 < recent["chance_of_quiet"] <= 1
+    quiet = [t for t in times if t <= now - timedelta(hours=16)]
+    long_gap = learning_replay(quiet, now, "America/New_York")["now"]
+    assert long_gap["unusual"] and long_gap["chance_of_quiet"] < 0.05
+    what_if = learning_replay(times, now, "America/New_York")["what_if"]
+    assert what_if[0]["quiet_minutes"] == 30 and not what_if[0]["unusual"]
+    assert any(step["unusual"] for step in what_if)
+
+
+def test_replay_without_history():
+    from app.routine import learning_replay
+
+    now = datetime(2026, 9, 26, 15, 0, tzinfo=timezone.utc)
+    replay = learning_replay([], now, "America/New_York")
+    assert replay["frames"] == [] and replay["now"]["chance_of_quiet"] is None

@@ -5,6 +5,7 @@ import type {
   Contact,
   Demo,
   DetailResponse,
+  DeviceLearning,
   Device,
   DevicesResponse,
   LoginResponse,
@@ -116,5 +117,7 @@ export const api = {
     request<{ ok: boolean; events_created: number }>("/demo/seed", "POST", {
       device_id,
     }),
+  learning: (id: string, source: "auto" | "real" | "sample" = "auto") =>
+    request<DeviceLearning>(`/devices/${encodeURIComponent(id)}/learning?source=${source}`),
   reset: () => request<{ ok: boolean }>("/demo/reset", "POST"),
 };

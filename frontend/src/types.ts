@@ -196,3 +196,29 @@ export interface ResidentSummary {
   alerts: Alert[];
   response_times: ResponseTimes;
 }
+export interface LearningFrame {
+  date: string;
+  days_of_data: number;
+  ready: boolean;
+  hourly_rate: number[];
+  hourly_threshold_minutes: number[];
+  visits: number[];
+}
+export interface DeviceLearning {
+  server_now: string;
+  device_id: string;
+  source: "real" | "sample";
+  real_days: number;
+  what_if: { quiet_minutes: number; chance: number; unusual: boolean }[];
+  timezone: string;
+  days_needed: number;
+  alert_probability: number;
+  min_gap_minutes: number;
+  frames: LearningFrame[];
+  now: {
+    last_motion_at: string | null;
+    quiet_minutes: number | null;
+    chance_of_quiet: number | null;
+    unusual: boolean;
+  };
+}

@@ -238,6 +238,14 @@ export default function ResidentPage() {
           </dl>
           <div className="okay-row">
             <MarkOkay residentId={resident.id} name={resident.first_name} onDone={refresh} />
+            {(unit?.device_id ?? data.devices[0]?.id) && (
+              <Link
+                className="button-link"
+                to={`/devices/${unit?.device_id ?? data.devices[0]?.id}?learn=1`}
+              >
+                ▶ Watch it learn {resident.first_name}’s routine
+              </Link>
+            )}
             <small className="muted">
               After a visit or call confirms {resident.first_name} is fine. Restarts the no-movement
               timer.

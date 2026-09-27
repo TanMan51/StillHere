@@ -155,6 +155,31 @@ DeviceDetail is the Device object plus:
 | `hourly_activity`          | [number] × 24 | Average motion events per hour of day, index 0 = midnight.                  |
 | `hourly_threshold_minutes` | [number] × 24 | Gap that counts as unusual at each hour of day.                             |
 
+### `GET /api/devices/{id}/learning`
+
+The learned routine replayed one local day at a time, for the dashboard's "watch it learn" demo.
+Every frame is the real model as it stood at the end of that day (today's is the model as of
+now). Same access as the device; `403` for family caregivers when the resident doesn't share
+activity. See `fixtures/device_learning.json`.
+
+Query: `source` = `auto` (default), `real`, or `sample`. A sensor with fewer than 7 days of real
+movement has nothing much to learn from, so `auto` replays 14 days of sample movement for its
+kind of object instead. The sample is generated for the response only and never stored.
+
+Response: `{"server_now", "device_id", "source" ("real" or "sample"), "real_days" (days with real
+movement), "timezone", "days_needed" (5), "alert_probability"
+(0.05), "min_gap_minutes" (60), "frames": [Frame], "now": {"last_motion_at": timestamp or null,
+"quiet_minutes": integer or null, "chance_of_quiet": number or null, "unusual": boolean},
+"what_if": [{"quiet_minutes", "chance", "unusual"}]}`. `what_if` is the model's judgment of quiet
+stretches from 30 minutes to 16 hours (every 30) ending now; empty until the routine is learned.
+
+**Frame:** `date` (local `"YYYY-MM-DD"`, oldest first, up to 28), `days_of_data`, `ready`,
+`hourly_rate` ([number] × 24: learned visits per hour at each local hour), `hourly_threshold_minutes`
+([number] × 24), `visits` ([integer]: minutes after local midnight of that day's visits; motion
+within 5 minutes counts as one visit). `chance_of_quiet` is the model's chance of a quiet
+stretch this long, null until the routine is learned; `unusual` is true when it is under
+`alert_probability` and the stretch is at least `min_gap_minutes`.
+
 ### `PATCH /api/devices/{id}`
 
 Body (all optional): `{"name": string, "limit_minutes": integer 1–2880, "sound_enabled": boolean,
@@ -396,5 +421,8 @@ Wording lives in `backend/app/messages.py`. These are examples, not a fixed form
   community `latitude`/`longitude`, and `POST /api/community/weather/simulate`.
 - Add weather location and conditions: community `location_name`, `conditions` on
   `GET /api/community`, and `GET /api/places`.
+- Add `GET /api/devices/{id}/learning` for the "watch it learn" routine demo.
+- Add `source`, `real_days`, and `what_if` to `GET /api/devices/{id}/learning`: new sensors
+  replay sample data (never stored).
 - Add "Mark as okay": `POST /api/residents/{id}/okay`, `marked_okay_at`/`marked_okay_by` on
   Resident, and `value: "check_in"` on the motion events it records.

@@ -979,3 +979,32 @@ def test_family_can_mark_only_their_own_resident_okay(client):
         "Sam (family)"
     )
     assert client.post("/api/residents/mg-106/okay", headers=family).status_code == 404
+
+
+def test_learning_replay_endpoint(client):
+    staff = _login(client, PROVIDER)
+    body = client.get("/api/devices/sim-101/learning", headers=staff).json()
+    assert set(body) == set(fixture("device_learning.json"))
+    assert body["source"] == "real" and body["real_days"] >= 28
+    assert len(body["frames"]) >= 20 and body["frames"][-1]["ready"]
+    family = _login(client, FAMILY)
+    assert client.get("/api/devices/sim-101/learning", headers=family).status_code == 404
+    client.patch("/api/residents/mg-204", json={"share_activity_with_family": False})
+    try:
+        res = client.get("/api/devices/fridge-1/learning", headers=family)
+        assert res.status_code == 403
+    finally:
+        client.patch("/api/residents/mg-204", json={"share_activity_with_family": True})
+
+
+def test_new_sensor_learns_from_sample_data_without_storing_it(client):
+    staff = _login(client, PROVIDER)
+    body = client.get("/api/devices/fridge-1/learning", headers=staff).json()
+    assert body["source"] == "sample" and body["real_days"] == 0
+    assert body["frames"][-1]["ready"] and body["what_if"]
+    chances = [step["chance"] for step in body["what_if"]]
+    assert chances == sorted(chances, reverse=True)  # longer quiet, less likely
+    assert body["what_if"][-1]["unusual"]
+    assert _fridge(client)["events"] == []  # nothing was written to the real sensor
+    real = client.get("/api/devices/fridge-1/learning?source=real", headers=staff).json()
+    assert real["source"] == "real" and real["frames"] == []
