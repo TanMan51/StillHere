@@ -106,7 +106,7 @@ Person A's checker -> compute_baseline(history, now, timezone)
 ```
 
 The dashboard displays decisions. The server owns decisions and sends texts.
-The browser never needs the device token or Twilio credentials.
+The browser never needs the device token or SMS credentials.
 
 ## Read the code in this order
 

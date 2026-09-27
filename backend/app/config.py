@@ -79,21 +79,9 @@ REPLY_WINDOW = timedelta(seconds=float(os.getenv("REPLY_WINDOW_SECONDS", "30")))
 CHECK_INTERVAL_SECONDS = float(os.getenv("CHECK_INTERVAL_SECONDS", "2"))
 CHECKER_ENABLED = os.getenv("CHECKER_ENABLED", "true").lower() != "false"
 
-# SimpleTexting. When the API key is set, texts go through SimpleTexting instead of Twilio.
-SIMPLETEXTING_API_KEY = os.getenv("SIMPLETEXTING_API_KEY", "")
-SIMPLETEXTING_FROM_NUMBER = os.getenv("SIMPLETEXTING_FROM_NUMBER", "")  # optional
-SIMPLETEXTING_API_URL = os.getenv(
-    "SIMPLETEXTING_API_URL", "https://api-app2.simpletexting.com/v2/api/messages"
-)
-
-# Textbelt (https://textbelt.com). Used when set and SimpleTexting isn't.
+# Textbelt (https://textbelt.com) sends the texts. Without a key, texts are only logged.
 TEXTBELT_API_KEY = os.getenv("TEXTBELT_API_KEY", "")
 TEXTBELT_API_URL = os.getenv("TEXTBELT_API_URL", "https://textbelt.com/text")
-
-# Twilio. When no provider is configured, notify.py logs texts instead of sending them.
-TWILIO_ACCOUNT_SID = os.getenv("TWILIO_ACCOUNT_SID", "")
-TWILIO_AUTH_TOKEN = os.getenv("TWILIO_AUTH_TOKEN", "")
-TWILIO_FROM_NUMBER = os.getenv("TWILIO_FROM_NUMBER", "")
 
 # Email fallback: used when no SMS provider is set up or every text fails.
 # RESEND_API_KEY sends over HTTPS (works on Railway, which blocks SMTP below the Pro plan).

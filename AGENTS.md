@@ -8,7 +8,7 @@ backend/frontend line.
 ## Stack
 
 - **Backend:** Python 3.11+, FastAPI, SQLModel on SQLite, APScheduler (check loop inside the
-  FastAPI process), Twilio for SMS. Pinned in `backend/requirements.txt`.
+  FastAPI process), Textbelt for SMS with Resend email as the fallback. Pinned in `backend/requirements.txt`.
 - **Frontend:** React, Vite, TypeScript, Tailwind, React Router, Recharts. Polls the API every
   2 seconds; no WebSockets. The build is served by FastAPI so everything lives at one URL.
 - **Firmware:** CircuitPython on a Circuit Playground Express, bridged over UART to a Pico W.
@@ -65,12 +65,12 @@ change is needed instead of making it.
 
 ## Secrets and config
 
-- Never put secrets in code, commits, tests, fixtures, or logs: Twilio credentials, device
+- Never put secrets in code, commits, tests, fixtures, or logs: Textbelt and Resend keys, device
   tokens for real hardware, phone numbers of real people. They go in `backend/.env` (gitignored)
   locally and in the host's environment variables when deployed.
 - Every new setting is read in `backend/app/config.py` and documented with a placeholder in
   `backend/.env.example`. Other modules import from `config`, not `os.getenv`.
-- Without Twilio credentials, `notify.py` logs texts instead of sending them. Keep that dry-run
+- Without a Textbelt key, `notify.py` logs texts instead of sending them. Keep that dry-run
   path working.
 
 ## Code style
