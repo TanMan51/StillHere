@@ -9,7 +9,7 @@ from zoneinfo import ZoneInfo
 
 import pytest
 from app.routine import Baseline, compute_baseline, evaluate, generate_week, next_alert_time
-from app.routine.baseline import describe_duration
+from app.routine.baseline import SURPRISE_LIMIT, describe_duration
 
 UTC = timezone.utc
 NOW = datetime(2026, 9, 26, 14, 15, tzinfo=UTC)
@@ -124,15 +124,46 @@ def test_synthetic_week_is_nonempty_deterministic_and_bounded() -> None:
     assert all(NOW - timedelta(days=7) <= t <= NOW for t in times)
 
 
-def test_next_alert_detects_threshold_drop_at_next_hour() -> None:
-    baseline = Baseline(True, 7, "UTC", [1] * 24, [720] * 24)
-    baseline.hourly_threshold_minutes[10] = 60
+def test_next_alert_finds_when_a_busy_hour_makes_silence_unlikely() -> None:
+    rates = [0.0] * 24
+    rates[10] = 6.0  # six visits an hour are expected from 10 to 11
+    baseline = Baseline(True, 7, "UTC", [1] * 24, [720] * 24, rates)
     now = NOW.replace(hour=9, minute=50, second=0)
     last = now.replace(hour=7, minute=0)
-    expected = now.replace(hour=10, minute=0)
-    assert next_alert_time(baseline, last, now, 1440) == expected
-    assert not evaluate(baseline, last, expected - timedelta(seconds=1), 1440, "Fridge").irregular
-    assert evaluate(baseline, last, expected, 1440, "Fridge").irregular
+    expected = now.replace(hour=10, minute=0) + timedelta(hours=SURPRISE_LIMIT / 6)
+    alert_at = next_alert_time(baseline, last, now, 1440)
+    assert abs((alert_at - expected).total_seconds()) < 0.001
+    assert not evaluate(baseline, last, alert_at - timedelta(seconds=1), 1440, "Fridge").irregular
+    assert evaluate(baseline, last, alert_at, 1440, "Fridge").reason == "learned"
+
+
+def test_quiet_stretch_after_breakfast_is_not_flagged() -> None:
+    before_lunch = NOW.replace(hour=15, minute=55)  # 11:55 AM in New York
+    history = generate_week(before_lunch, TZ)
+    baseline = compute_baseline(history, before_lunch, TZ)
+    assert not evaluate(baseline, history[-1], before_lunch, LIMIT, "Fridge").irregular
+
+
+def test_learned_note_gives_the_chance() -> None:
+    today = NOW.astimezone(ZoneInfo(TZ)).date()
+    history = [t for t in generate_week(NOW, TZ) if t.astimezone(ZoneInfo(TZ)).date() < today]
+    verdict = evaluate(compute_baseline(history, NOW, TZ), history[-1], NOW, 1440, "Fridge")
+    assert "% chance" in verdict.note
+
+
+def test_a_burst_of_motion_counts_as_one_visit() -> None:
+    history = generate_week(NOW, TZ)
+    burst = [t + timedelta(seconds=s) for t in history for s in (0, 20, 40)]
+    assert (
+        compute_baseline(burst, NOW, TZ).hourly_rate
+        == compute_baseline(history, NOW, TZ).hourly_rate
+    )
+
+
+def test_model_learns_a_rate_for_each_hour() -> None:
+    baseline = compute_baseline(generate_week(NOW, TZ), NOW, TZ)
+    assert len(baseline.hourly_rate) == 24
+    assert baseline.hourly_rate[7] > baseline.hourly_rate[3]  # breakfast vs the middle of the night
 
 
 def test_fixed_limit_caps_learned_threshold() -> None:

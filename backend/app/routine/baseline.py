@@ -1,21 +1,49 @@
 """Pure, timezone-aware routine learning. Owned by Person B.
 
-Thresholds describe elapsed inactivity at each local hour, not the duration
-of every gap touching that hour. This lets an ordinary night be quiet while
-still noticing that the usual breakfast activity never happened.
+The learned routine is a probabilistic model of when this person is usually active: a
+non-homogeneous Poisson process whose rate depends on the local hour of day. It is fitted
+from the last four weeks of motion with Bayesian (Gamma-Poisson) estimates, recent days
+weighted more than older ones, and each hour smoothed with its neighbours. For any quiet
+stretch the model gives the probability of seeing no activity at all over it; when that
+probability drops below ALERT_PROBABILITY, the silence is unusual for this person.
+
+Scoring the whole stretch, rather than only the current hour, keeps an ordinary night quiet
+while still noticing that the usual breakfast activity never happened.
 """
 
 from __future__ import annotations
 
-from bisect import bisect_right
+import math
 from dataclasses import asdict, dataclass, field
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from datetime import timezone as dt_timezone
-from math import ceil
 from zoneinfo import ZoneInfo
 
 MIN_DAYS_FOR_READY = 5
+HISTORY_DAYS = 28
 UTC = dt_timezone.utc
+
+# Alert when a silence this long had less than this chance under the learned model.
+ALERT_PROBABILITY = 0.05
+SURPRISE_LIMIT = -math.log(ALERT_PROBABILITY)
+# Never call a gap unusual before an hour has passed, whatever the model says.
+MIN_GAP_MINUTES = 60.0
+MAX_THRESHOLD_MINUTES = 2880.0
+# Motion within this many minutes of the previous event is the same visit (one fridge
+# opening shakes the sensor several times), so it counts once.
+SESSION_GAP_MINUTES = 5
+# A day's weight halves every this many days, so the model follows changing habits.
+HALF_LIFE_DAYS = 7.0
+# Gamma prior on each hour's rate: PRIOR_EVENTS events over PRIOR_DAYS days. It keeps hours
+# never seen active from getting a rate of exactly zero.
+PRIOR_EVENTS = 0.002
+PRIOR_DAYS = 0.1
+# Share of each hour's rate that spills into each neighbouring hour, for habits that drift
+# across an hour boundary (breakfast at 7:55 one day and 8:05 the next).
+NEIGHBOUR_SHARE = 0.15
+# Walk time in quarter hours: every timezone offset is a multiple of 15 minutes, so the local
+# hour, and with it the rate, is constant inside each step.
+STEP = timedelta(minutes=15)
 
 
 @dataclass
@@ -25,10 +53,14 @@ class Baseline:
     timezone: str
     hourly_activity: list[float] = field(default_factory=lambda: [0.0] * 24)
     hourly_threshold_minutes: list[float] = field(default_factory=lambda: [0.0] * 24)
+    # Learned visits per hour at each local hour of day. Internal, not in the contract.
+    hourly_rate: list[float] | None = None
 
     def to_dict(self) -> dict:
         """Exactly the baseline object in contract/api.md."""
-        return asdict(self)
+        data = asdict(self)
+        del data["hourly_rate"]
+        return data
 
 
 @dataclass
@@ -44,77 +76,114 @@ def _utc(value: datetime) -> datetime:
     return value.astimezone(UTC)
 
 
-def compute_baseline(motion_times: list[datetime], now: datetime, timezone: str) -> Baseline:
-    """Learn from the last 28 days, excluding future events and duplicate timestamps.
+def _sessions(times: list[datetime]) -> list[datetime]:
+    """Keep the first motion of each visit."""
+    gap = timedelta(minutes=SESSION_GAP_MINUTES)
+    starts = times[:1]
+    for previous, t in zip(times, times[1:]):
+        if t - previous >= gap:
+            starts.append(t)
+    return starts
 
-    For each historical hour, sample elapsed inactivity at its start, end,
-    and immediately before each motion. Use p90 * 1.5, with a 60-minute floor.
-    Missing hours use a conservative 2880-minute ceiling. The caller's fixed
-    limit is applied by evaluate(), since it is not part of this signature.
-    Partial boundary days do not count toward the five-day readiness rule.
+
+def _fit_rates(
+    sessions: list[datetime], days: list[date], today: date, zone: ZoneInfo
+) -> list[float]:
+    """Posterior mean visits per hour for each local hour, recency-weighted and smoothed."""
+    weight = {d: 0.5 ** ((today - d).days / HALF_LIFE_DAYS) for d in days}
+    exposure = sum(weight.values())
+    counts = [0.0] * 24
+    for t in sessions:
+        local = t.astimezone(zone)
+        if local.date() in weight:
+            counts[local.hour] += weight[local.date()]
+    rates = [(c + PRIOR_EVENTS) / (exposure + PRIOR_DAYS) for c in counts]
+    keep = 1 - 2 * NEIGHBOUR_SHARE
+    return [
+        keep * rates[h] + NEIGHBOUR_SHARE * (rates[h - 1] + rates[(h + 1) % 24]) for h in range(24)
+    ]
+
+
+def _typical_thresholds(rates: list[float]) -> list[float]:
+    """For display: the silence that becomes unusual when it ends at half past each hour."""
+    thresholds = []
+    for hour in range(24):
+        surprise, minutes = 0.0, 0.0
+        clock_hour, left_in_hour = hour, 30.0
+        while minutes < MAX_THRESHOLD_MINUTES:
+            rate = rates[clock_hour] / 60
+            if rate > 0 and surprise + rate * left_in_hour >= SURPRISE_LIMIT:
+                minutes += (SURPRISE_LIMIT - surprise) / rate
+                break
+            surprise += rate * left_in_hour
+            minutes += left_in_hour
+            clock_hour, left_in_hour = (clock_hour - 1) % 24, 60.0
+        thresholds.append(round(max(MIN_GAP_MINUTES, min(MAX_THRESHOLD_MINUTES, minutes)), 2))
+    return thresholds
+
+
+def compute_baseline(motion_times: list[datetime], now: datetime, timezone: str) -> Baseline:
+    """Fit the routine model to the last 28 days, excluding future and duplicate events.
+
+    Only complete local days count: the first (partial) day of data and today are left out
+    of both the fit and the five-day readiness rule. The caller's fixed limit is applied by
+    evaluate(), since it is not part of this signature.
     """
     end = _utc(now)
     zone = ZoneInfo(timezone)
-    history_start = end - timedelta(days=28)
-    normalized_times = {_utc(t) for t in motion_times}
-    times = sorted(t for t in normalized_times if history_start <= t < end)
+    history_start = end - timedelta(days=HISTORY_DAYS)
+    times = sorted(t for t in {_utc(t) for t in motion_times} if history_start <= t < end)
     if not times:
         return Baseline(False, 0, timezone)
     first_day = times[0].astimezone(zone).date()
     today = end.astimezone(zone).date()
     observed_days = (today - first_day).days
     counts = [0] * 24
-    complete_active_days = set()
+    active_days = set()
     for t in times:
         local = t.astimezone(zone)
         if local.date() < today:
             counts[local.hour] += 1
-        # Require five complete local days with motion; exclude the first partial day.
         if first_day < local.date() < today:
-            complete_active_days.add(local.date())
-    samples: list[list[float]] = [[] for _ in range(24)]
-    first_hour = times[0].astimezone(zone).replace(minute=0, second=0, microsecond=0)
-    cursor = first_hour.astimezone(UTC) + timedelta(hours=1)
-    while cursor + timedelta(hours=1) <= end:
-        stop = cursor + timedelta(hours=1)
-        local = cursor.astimezone(zone)
-        if first_day < local.date() < today:
-            index = bisect_right(times, cursor) - 1
-            if index >= 0:
-                last = times[index]
-                maximum = (cursor - last).total_seconds() / 60
-                index += 1
-                while index < len(times) and times[index] < stop:
-                    maximum = max(maximum, (times[index] - last).total_seconds() / 60)
-                    last = times[index]
-                    index += 1
-                maximum = max(maximum, (stop - last).total_seconds() / 60)
-                samples[local.hour].append(maximum)
-        cursor = stop
-    thresholds = []
-    for values in samples:
-        p90 = sorted(values)[ceil(len(values) * 0.9) - 1] if values else 1920
-        thresholds.append(round(max(60.0, min(2880.0, p90 * 1.5)), 2))
-    days = len(complete_active_days)
+            active_days.add(local.date())
+    complete_days = [first_day + timedelta(days=i) for i in range(1, observed_days)]
+    rates = _fit_rates(_sessions(times), complete_days, today, zone)
     return Baseline(
-        days >= MIN_DAYS_FOR_READY,
-        days,
+        len(active_days) >= MIN_DAYS_FOR_READY,
+        len(active_days),
         timezone,
         [round(c / max(1, observed_days), 3) for c in counts],
-        thresholds,
+        _typical_thresholds(rates),
+        [round(r, 4) for r in rates],
     )
 
 
-def _threshold(baseline: Baseline, now: datetime, fixed_limit_minutes: int) -> tuple[float, str]:
-    if fixed_limit_minutes <= 0:
-        raise ValueError("fixed_limit_minutes must be positive")
-    if baseline.ready:
-        learned = baseline.hourly_threshold_minutes[
-            now.astimezone(ZoneInfo(baseline.timezone)).hour
-        ]
-        if 0 < learned < fixed_limit_minutes:
-            return learned, "learned"
-    return float(fixed_limit_minutes), "fixed_limit"
+def _steps(start: datetime, end: datetime, zone: ZoneInfo):
+    """(step start, step end, local hour) pieces covering start to end."""
+    cursor = start
+    while cursor < end:
+        boundary = datetime.fromtimestamp(
+            (cursor.timestamp() // STEP.total_seconds() + 1) * STEP.total_seconds(), UTC
+        )
+        stop = min(boundary, end)
+        yield cursor, stop, cursor.astimezone(zone).hour
+        cursor = stop
+
+
+def surprise(baseline: Baseline, start: datetime, end: datetime) -> float:
+    """Expected visits between start and end under the model. The chance of seeing none at
+    all is exp(-surprise), so larger means more unusual."""
+    if not baseline.hourly_rate:
+        return 0.0
+    zone = ZoneInfo(baseline.timezone)
+    return sum(
+        baseline.hourly_rate[hour] * (stop - begin).total_seconds() / 3600
+        for begin, stop, hour in _steps(_utc(start), _utc(end), zone)
+    )
+
+
+def _learned(baseline: Baseline) -> bool:
+    return baseline.ready and bool(baseline.hourly_rate)
 
 
 def evaluate(
@@ -124,27 +193,39 @@ def evaluate(
     fixed_limit_minutes: int,
     device_name: str,
 ) -> Verdict:
-    """Apply the smaller of this hour's learned threshold and the fixed limit.
+    """Flag the silence since last_motion when the model finds it unlikely, or when it
+    reaches the fixed limit, whichever comes first.
 
-    Equality triggers a check-in so next_alert_time() and evaluate() agree.
     No motion yet is left to the backend's onboarding/offline policy.
     """
+    if fixed_limit_minutes <= 0:
+        raise ValueError("fixed_limit_minutes must be positive")
     current = _utc(now)
     if last_motion is None:
         return Verdict(False, None, None)
-    gap = (current - _utc(last_motion)).total_seconds() / 60
-    threshold, reason = _threshold(baseline, current, fixed_limit_minutes)
-    if gap < threshold:
-        return Verdict(False, None, None)
-    note = None
-    if reason == "learned":
-        local = current.astimezone(ZoneInfo(baseline.timezone))
-        note = (
-            f"{device_name} has had no activity for {describe_duration(gap)}, "
-            f"which is longer than usual around {_clock_hour(local)}. "
-            "You may want to check in."
-        )
-    return Verdict(True, reason, note)
+    last = _utc(last_motion)
+    gap = (current - last).total_seconds() / 60
+    if _learned(baseline) and MIN_GAP_MINUTES <= gap < fixed_limit_minutes:
+        score = surprise(baseline, last, current)
+        # A hair of slack so the moment next_alert_time() returns always counts.
+        if score >= SURPRISE_LIMIT - 1e-9:
+            local = current.astimezone(ZoneInfo(baseline.timezone))
+            note = (
+                f"{device_name} has had no activity for {describe_duration(gap)}, "
+                f"which is longer than usual around {_clock_hour(local)}. "
+                f"Based on recent weeks, a quiet stretch this long is {_chance(score)}. "
+                "You may want to check in."
+            )
+            return Verdict(True, "learned", note)
+    if gap >= fixed_limit_minutes:
+        return Verdict(True, "fixed_limit", None)
+    return Verdict(False, None, None)
+
+
+def _chance(score: float) -> str:
+    """exp(-score) for people: "under a 1% chance", "about a 3% chance"."""
+    percent = round(100 * math.exp(-score))
+    return "under a 1% chance" if percent < 1 else f"about a {percent}% chance"
 
 
 def describe_duration(minutes: float) -> str:
@@ -168,27 +249,27 @@ def _clock_hour(local: datetime) -> str:
 def next_alert_time(
     baseline: Baseline, last_motion: datetime | None, now: datetime, fixed_limit_minutes: int
 ) -> datetime | None:
-    """Find the first threshold crossing, including drops at local hour changes.
+    """When evaluate() will first flag the current silence if nothing moves.
 
-    Walk in UTC to handle skipped/repeated DST hours correctly. The minute
-    scan also finds local hour transitions in half/quarter-hour timezones.
-    The result is on the server clock; Person A converts to real seconds.
+    Walks forward in UTC quarter hours, so skipped or repeated DST hours and half-hour
+    timezones are handled. The result is on the server clock; Person A converts to real
+    seconds.
     """
     current = _utc(now)
     if last_motion is None:
         return None
     last = _utc(last_motion)
     deadline = last + timedelta(minutes=fixed_limit_minutes)
-    if not baseline.ready:
+    if not _learned(baseline):
         return max(current, deadline)
-    cursor = current
-    while cursor <= deadline:
-        threshold, _ = _threshold(baseline, cursor, fixed_limit_minutes)
-        crossing = last + timedelta(minutes=threshold)
-        if crossing <= cursor:
-            return cursor
-        next_minute = cursor.replace(second=0, microsecond=0) + timedelta(minutes=1)
-        if crossing < next_minute:
-            return crossing
-        cursor = next_minute
+    earliest = last + timedelta(minutes=MIN_GAP_MINUTES)
+    zone = ZoneInfo(baseline.timezone)
+    score = 0.0
+    for begin, stop, hour in _steps(last, deadline, zone):
+        rate = baseline.hourly_rate[hour] / 3600
+        step_score = rate * (stop - begin).total_seconds()
+        if rate > 0 and score + step_score >= SURPRISE_LIMIT:
+            crossing = begin + timedelta(seconds=(SURPRISE_LIMIT - score) / rate)
+            return max(current, earliest, crossing)
+        score += step_score
     return max(current, deadline)
